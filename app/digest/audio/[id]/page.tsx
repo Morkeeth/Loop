@@ -14,8 +14,6 @@ export default function AudioDigestPage() {
   const params = useParams();
   const digestId = params.id as string;
   
-  console.log('Audio digest page - digestId:', digestId);
-  
   const [digestData, setDigestData] = useState<AudioDigestData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isGeneratingAudio, setIsGeneratingAudio] = useState(false);
@@ -30,22 +28,15 @@ export default function AudioDigestPage() {
   const fetchDigestData = async () => {
     try {
       setIsLoading(true);
-      console.log('Fetching digest data for ID:', digestId);
       const response = await fetch(`/api/digest/audio/${digestId}`);
       
-      console.log('Response status:', response.status);
-      
       if (!response.ok) {
-        const errorData = await response.json();
-        console.log('Error response:', errorData);
         throw new Error('Digest not found');
       }
       
       const data = await response.json();
-      console.log('Digest data received:', data);
       setDigestData(data);
     } catch (err) {
-      console.error('Error fetching digest:', err);
       setError(err instanceof Error ? err.message : 'Failed to load digest');
     } finally {
       setIsLoading(false);

@@ -1,5 +1,7 @@
 // Mock digest content for testing audio functionality
-export const MOCK_DIGEST_CONTENT = `Welcome to Loop Radio, your personalized Sunday digest.
+export const MOCK_DIGEST_CONTENT = `🎧 Listen To Your Digest: {{AUDIO_URL}}
+
+Welcome to Loop Radio, your personalized Sunday digest.
 
 Today's highlights:
 
@@ -23,16 +25,26 @@ Today's highlights:
 - Thursday's free afternoon is ideal for catching up on personal projects
 - Weekend looks social - maybe plan something fun with friends
 
+🔗 **Helpful Resources**
+- Check out https://calendar.google.com for better scheduling
+- Learn more at https://www.notion.so/productivity-tips
+- Connect with us at https://loop.app/community
+
 Remember: Your calendar reflects someone who values both productivity and social connection. Keep balancing work and play!
 
 That's your Loop Radio digest for this week. Stay tuned for more personalized insights.`;
 
 export function generateMockDigest() {
   const digestId = `test-${Date.now()}`;
+  const audioUrl = `/digest/audio/${digestId}`;
+  
+  // Replace the placeholder with the actual audio URL
+  const contentWithAudioLink = MOCK_DIGEST_CONTENT.replace('{{AUDIO_URL}}', audioUrl);
+  
   return {
-    content: MOCK_DIGEST_CONTENT,
+    content: contentWithAudioLink,
     digestId,
-    audioUrl: `/digest/audio/${digestId}`,
+    audioUrl,
     createdAt: new Date().toISOString(),
   };
 }

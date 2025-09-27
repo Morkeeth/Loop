@@ -20,6 +20,11 @@ interface DigestPanelProps {
 }
 
 export function DigestPanel({ digest, digestId, audioUrl, isGenerating, onGenerate, onCreateEvent, isCreatingEvent, requestData, onDigestComplete, onTestDigest }: DigestPanelProps) {
+  console.log('🟠 DIGEST PANEL RENDERED');
+  console.log('🟠 onTestDigest:', !!onTestDigest);
+  console.log('🟠 digest:', !!digest);
+  console.log('🟠 isGenerating:', isGenerating);
+  
   return (
     <section className="space-y-4">
       <header className="flex flex-wrap items-center justify-between gap-3">
@@ -76,9 +81,9 @@ export function DigestPanel({ digest, digestId, audioUrl, isGenerating, onGenera
             </pre>
           </div>
           
-          {/* Audio Link */}
+          {/* Secondary Audio Link */}
           {audioUrl && (
-            <div className="flex justify-center mb-4">
+            <div className="flex justify-center">
               <a
                 href={audioUrl}
                 target="_blank"

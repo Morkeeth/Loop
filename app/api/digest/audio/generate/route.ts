@@ -19,8 +19,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Generate audio using ElevenLabs
-    const audioResponse = await fetch('https://api.elevenlabs.io/v1/text-to-speech/kENkNtk0xyzG09WW40xE', {
+    // Clean content for speech-to-text (remove URLs and audio links)
+    const cleanContent = content
+      .replace(/🎧 Listen To Your Digest: \S+/g, '') // Remove audio link line
+      .replace(/https?:\/\/[^\s]+/g, '') // Remove all URLs
+      .replace(/\s+/g, ' ') // Clean up extra whitespace
+      .trim();
+
+    // Add French accent tag to the cleaned content for v3 alpha model
+    const contentWithFrenchAccent = `[French accent] [warmly] ${cleanContent}`;
+
+    // Generate audio using ElevenLabs with French accent voice
+    const audioResponse = await fetch('https://api.elevenlabs.io/v1/text-to-speech/sa2z6gEuOalzawBHvrCV', {
       method: 'POST',
       headers: {
         'Accept': 'audio/mpeg',
@@ -28,12 +38,10 @@ export async function POST(request: NextRequest) {
         'xi-api-key': process.env.ELEVENLABS_API_KEY,
       },
       body: JSON.stringify({
-        text: content,
-        model_id: 'eleven_multilingual_v2',
+        text: contentWithFrenchAccent,
+        model_id: 'eleven_v3',
         voice_settings: {
           stability: 0.5,
-          similarity_boost: 0.5,
-          style: 0.0,
           use_speaker_boost: true
         }
       }),

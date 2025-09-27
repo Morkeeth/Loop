@@ -17,7 +17,7 @@ Transform your calendar from a scheduling tool into a personalized life assistan
 - **Frontend**: Next.js 15, React, TypeScript, Tailwind CSS
 - **Authentication**: Google OAuth 2.0
 - **AI**: OpenAI GPT-4 & GPT-4o-mini
-- **Text-to-Speech**: ElevenLabs API with Marcel voice
+- **Text-to-Speech**: ElevenLabs v3 Alpha API with French accent voice (ID: sa2z6gEuOalzawBHvrCV)
 - **Calendar**: Google Calendar API
 - **Styling**: Tailwind CSS with custom gradients and animations
 
@@ -94,16 +94,13 @@ loop-labs/
 │   ├── LandingHero.tsx  # Landing page hero section
 │   ├── LoadingScreen.tsx # Loading animation with AI comments
 │   ├── PersonaDisplay.tsx # Persona profile display
-│   └── MorningBrief.tsx  # Morning brief display
 ├── lib/                 # Utility libraries
 │   ├── google-auth.ts   # Google OAuth utilities
 │   ├── calendar-service.ts # Calendar data processing
-│   ├── persona-generator.ts # AI persona generation
-│   └── brief-generator.ts # AI brief generation
+│   └── persona-generator.ts # AI persona generation
 ├── types/               # TypeScript type definitions
 │   ├── calendar.ts     # Calendar-related types
-│   ├── persona.ts      # Persona-related types
-│   └── brief.ts        # Brief-related types
+│   └── persona.ts      # Persona-related types
 └── loop-project-spec.md # Detailed project specification
 ```
 
@@ -112,7 +109,6 @@ loop-labs/
 - `POST /api/auth/google` - Handle Google OAuth callback
 - `GET /api/calendar` - Fetch user's calendar events
 - `POST /api/persona` - Generate AI persona from calendar data
-- `POST /api/brief` - Generate personalized morning brief
 - `POST /api/digest` - Generate Sunday digest with unique audio link
 - `POST /api/digest/stream` - Generate digest with real-time progress streaming
 - `GET /api/digest/audio/[id]` - Fetch digest by ID
@@ -139,8 +135,8 @@ loop-labs/
 
 ### Audio Digest Feature
 - Unique subpage for each digest (`/digest/audio/[id]`)
-- Text-to-speech generation using ElevenLabs API
-- Marcel voice with French accent
+- Text-to-speech generation using ElevenLabs v3 Alpha API
+- French accent voice with enhanced audio tags (Voice ID: sa2z6gEuOalzawBHvrCV)
 - Big play button for easy audio playback
 - Audio stored as base64 data URLs for immediate playback
 
