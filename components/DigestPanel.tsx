@@ -13,8 +13,8 @@ export function DigestPanel({ digest, isGenerating, onGenerate, onCreateEvent, i
     <section className="space-y-4">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-lg font-semibold text-gray-900">Sunday Digest</h2>
-          <p className="text-sm text-gray-500">
+          <h2 className="text-lg font-semibold text-black uppercase tracking-wide">Sunday Digest</h2>
+          <p className="text-sm text-gray-600">
             Use the `digest-prompt.md` template with the persona and recent calendar JSON.
           </p>
         </div>
@@ -22,7 +22,7 @@ export function DigestPanel({ digest, isGenerating, onGenerate, onCreateEvent, i
           type="button"
           onClick={onGenerate}
           disabled={isGenerating}
-          className="rounded border border-gray-900 bg-gray-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-black disabled:cursor-not-allowed disabled:border-gray-300 disabled:bg-gray-200 disabled:text-gray-500"
+          className="minimal-button"
         >
           {isGenerating ? 'Writing digest…' : 'Run Sunday Digest'}
         </button>
@@ -30,8 +30,8 @@ export function DigestPanel({ digest, isGenerating, onGenerate, onCreateEvent, i
 
       {digest ? (
         <article className="space-y-4">
-          <div className="rounded border border-gray-200 bg-white p-6 text-sm leading-relaxed text-gray-800 shadow-sm">
-            <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed text-gray-900">
+          <div className="border border-black bg-white p-6 text-sm leading-relaxed text-black">
+            <pre className="whitespace-pre-wrap text-sm leading-relaxed text-black">
 {digest}
             </pre>
           </div>
@@ -42,7 +42,7 @@ export function DigestPanel({ digest, isGenerating, onGenerate, onCreateEvent, i
                 type="button"
                 onClick={onCreateEvent}
                 disabled={isCreatingEvent}
-                className="rounded border border-gray-900 bg-gray-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-black disabled:cursor-not-allowed disabled:border-gray-300 disabled:bg-gray-200 disabled:text-gray-500"
+                className="minimal-button-secondary"
               >
                 {isCreatingEvent ? 'Creating Event…' : 'Add to Calendar'}
               </button>
@@ -50,7 +50,7 @@ export function DigestPanel({ digest, isGenerating, onGenerate, onCreateEvent, i
           )}
         </article>
       ) : (
-        <div className="rounded border border-dashed border-gray-300 bg-gray-50 p-10 text-center text-sm text-gray-500">
+        <div className="border border-black bg-white p-10 text-center text-sm text-gray-600">
           Generate the persona first, then run the Sunday digest with the persona + recent events.
         </div>
       )}

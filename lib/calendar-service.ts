@@ -87,10 +87,20 @@ Rules:
       const miniClient = CalendarService.getMiniClient();
       const prompt = await CalendarService.getInsightPrompt();
 
+      // Analyze events for contextual insights
+      const eventTypes = this.analyzeEventTypes(events);
+      const timePatterns = this.analyzeTimePatterns(events);
+      const socialPatterns = this.analyzeSocialPatterns(events);
+
       const payload = {
         now_iso: new Date().toISOString(),
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         event_sample: this.summarizeForInsights(events),
+        analysis_context: {
+          event_types: eventTypes,
+          time_patterns: timePatterns,
+          social_patterns: socialPatterns,
+        }
       };
 
       const response = await miniClient.chat.completions.create({
@@ -121,6 +131,50 @@ Rules:
       console.error('Realtime insight generation failed:', error);
       return [];
     }
+  }
+
+  private analyzeEventTypes(events: CalendarEvent[]) {
+    const types = events.map(event => this.categorizeEvent(event).type);
+    const counts = types.reduce((acc, type) => {
+      acc[type] = (acc[type] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+    
+    return Object.entries(counts)
+      .sort(([,a], [,b]) => b - a)
+      .slice(0, 3)
+      .map(([type, count]) => ({ type, count }));
+  }
+
+  private analyzeTimePatterns(events: CalendarEvent[]) {
+    const hours = events
+      .filter(event => event.start.dateTime)
+      .map(event => new Date(event.start.dateTime!).getHours());
+    
+    const morningCount = hours.filter(h => h >= 6 && h < 12).length;
+    const afternoonCount = hours.filter(h => h >= 12 && h < 18).length;
+    const eveningCount = hours.filter(h => h >= 18 && h < 24).length;
+    
+    return { morningCount, afternoonCount, eveningCount };
+  }
+
+  private analyzeSocialPatterns(events: CalendarEvent[]) {
+    const socialEvents = events.filter(event => 
+      this.categorizeEvent(event).type === 'social'
+    );
+    
+    const recurringSocial = events.filter(event => 
+      event.recurrence && event.recurrence.length > 0 && 
+      this.categorizeEvent(event).type === 'social'
+    );
+    
+    return {
+      socialEventCount: socialEvents.length,
+      recurringSocialCount: recurringSocial.length,
+      avgAttendees: Math.round(
+        events.reduce((sum, event) => sum + (event.attendees?.length || 0), 0) / events.length
+      )
+    };
   }
 
   async fetchCalendarEvents(monthsBack: number = 3): Promise<CalendarEvent[]> {
