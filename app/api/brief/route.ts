@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { BriefGenerator } from '@/lib/brief-generator';
-import { PersonaProfile, ProcessedEvent } from '@/types/brief';
+import { PersonaProfile } from '@/types/persona';
+import { ProcessedEvent } from '@/types/calendar';
 
 export async function POST(request: NextRequest) {
   try {
