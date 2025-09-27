@@ -35,7 +35,7 @@ function minifyEvents(events: NormalizedEvent[]) {
     st: event.start?.dateTime || event.start?.date,
     et: event.end?.dateTime || event.end?.date,
     loc: event.location,
-    attn: event.attendees?.slice(0, 5).map((attendee) => attendee.email),
+    attn: event.attendees?.slice(0, 5).map((attendee: { email: string }) => attendee.email),
     recur: Boolean(event.recurrence?.length || event.recurringEventId),
   }));
 }
