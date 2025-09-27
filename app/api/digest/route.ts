@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import fs from 'fs';
 import path from 'path';
+import { v4 as uuidv4 } from 'uuid';
 
 import { DigestContext } from '@/types/digest-context';
 
@@ -72,80 +73,106 @@ ${promptBody}`;
     console.log('User prompt size:', userPrompt.length, 'characters');
     console.log('System prompt size:', systemPrompt.length, 'characters');
 
-    // Call OpenAI with web browsing capabilities (GPT-4o-mini first for higher token limits, then fallback)
-    let response;
-    const models = ['gpt-4o-mini', 'gpt-4o']; // Start with GPT-4o-mini for higher token limits
-    
-    for (const model of models) {
-      try {
-        console.log(`Attempting to generate digest with ${model}...`);
-        
-        // Use different parameters based on model
-        const requestParams: any = {
-          model,
-          messages: [
+    console.log('Attempting to generate digest with gpt-5 via Responses API...');
+    const response = await openai.responses.create({
+      model: 'gpt-5',
+      input: [
+        {
+          role: 'developer',
+          content: [
             {
-              role: 'system',
-              content: systemPrompt
+              type: 'input_text',
+              text: systemPrompt,
             },
-            {
-              role: 'user',
-              content: userPrompt
-            }
           ],
-        };
+        },
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'input_text',
+              text: userPrompt,
+            },
+          ],
+        },
+      ],
+      text: {
+        format: {
+          type: 'text',
+        },
+        verbosity: 'medium',
+      },
+      reasoning: {
+        effort: 'medium',
+      },
+      tools: [
+        {
+          type: 'web_search',
+          user_location: {
+            type: 'approximate',
+          },
+          search_context_size: 'medium',
+        },
+      ],
+      store: true,
+      include: ['reasoning.encrypted_content', 'web_search_call.action.sources'] as any,
+    });
 
-        // Set parameters for all models
-        requestParams.max_tokens = 4000;
-        requestParams.temperature = 0.7;
-
-        response = await openai.chat.completions.create(requestParams);
-        
-        console.log(`Successfully generated digest with ${model}`);
-        break; // Success, exit the loop
-        
-      } catch (openaiError: any) {
-        console.log(`Failed with ${model}:`, openaiError.message);
-        console.log(`Error details:`, {
-          code: openaiError.code,
-          type: openaiError.type,
-          param: openaiError.param,
-          status: openaiError.status,
-          fullError: openaiError
-        });
-        
-        if (openaiError.code === 'context_length_exceeded' || 
-            openaiError.code === 'model_not_found' ||
-            openaiError.code === 'unsupported_parameter' ||
-            openaiError.code === 'unsupported_value' ||
-            openaiError.code === 'rate_limit_exceeded' ||
-            openaiError.message.includes('not available') ||
-            openaiError.message.includes('not supported') ||
-            openaiError.message.includes('Request too large')) {
-          console.log(`Model ${model} not available or parameter issue, trying next model...`);
-          continue; // Try next model
-        } else {
-          throw openaiError; // Re-throw if it's not a model availability issue
-        }
-      }
-    }
-    
-    if (!response) {
-      throw new Error('All models failed to generate digest');
-    }
-    
     console.log('OpenAI response received');
 
-    const content = response.choices[0]?.message?.content;
-    if (!content) {
-      throw new Error('No response from OpenAI');
+    const outputText =
+      (response as any).output_text ||
+      ((response as any).output
+        ?.map((item: any) =>
+          item.content
+            ?.map((chunk: any) =>
+              typeof chunk.text === 'string'
+                ? chunk.text
+                : chunk.text?.value ?? ''
+            )
+            .join('')
+        )
+        .join(''));
+
+    if (!outputText || !outputText.trim()) {
+      throw new Error('No text output returned from GPT-5 response');
     }
 
-    console.log('Digest generated successfully, length:', content.length);
+    console.log('Digest generated successfully, length:', outputText.length);
+
+    // Generate unique ID for this digest
+    const digestId = uuidv4();
+    
+    // Create digest record for audio generation
+    const digestRecord = {
+      id: digestId,
+      content: outputText,
+      createdAt: new Date().toISOString(),
+    };
+
+    // Store digest record (in production, use a database)
+    // For now, we'll make it available via the audio API
+    try {
+      await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/digest/audio/${digestId}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(digestRecord),
+      });
+    } catch (error) {
+      console.error('Failed to store digest record:', error);
+    }
 
     return NextResponse.json({
-      content: content,
-      usage: response.usage
+      content: outputText,
+      digestId,
+      audioUrl: `/digest/audio/${digestId}`,
+      usage: (response as any).usage,
+      metadata: {
+        reasoning: (response as any).reasoning,
+        includes: (response as any).included,
+      },
     });
 
   } catch (error) {

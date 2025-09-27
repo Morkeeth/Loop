@@ -3,6 +3,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 
+import { generateMockDigest } from '@/lib/mock-digest';
+import { storeDigest } from '@/lib/digest-storage';
+
 import { DataSection } from '@/components/DataSection';
 import { DigestPanel } from '@/components/DigestPanel';
 import { InsightsBanner } from '@/components/InsightsBanner';
@@ -30,6 +33,13 @@ export default function Dashboard() {
   const [persona, setPersona] = useState<any | null>(null);
   const [isGeneratingPersona, setIsGeneratingPersona] = useState(false);
   const [digest, setDigest] = useState<string | null>(null);
+  const [digestId, setDigestId] = useState<string | null>(null);
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [digestRequestData, setDigestRequestData] = useState<{
+    personaText: string;
+    recentCalendarJson: string;
+    promptTemplate: string;
+  } | null>(null);
   const [isGeneratingDigest, setIsGeneratingDigest] = useState(false);
   const [isCreatingEvent, setIsCreatingEvent] = useState(false);
   const [showMinified, setShowMinified] = useState(true);
@@ -187,36 +197,43 @@ export default function Dashboard() {
       return;
     }
 
-    try {
-      setIsGeneratingDigest(true);
+    setIsGeneratingDigest(true);
+    setActiveTab('digest');
 
-      const response = await fetch('/api/digest', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          personaText: JSON.stringify(persona, null, 2),
-          recentCalendarJson: JSON.stringify(calendarPayload.minified, null, 2),
-          promptTemplate: 'Run the Sunday digest.\n\nPersona description:\n{{persona_text}}\n\nRecent Calendar JSON:\n{{recent_calendar_json}}',
-        }),
-      });
+    const digestWindow = calendarPayload.minified;
+    const requestData = {
+      personaText: JSON.stringify(persona, null, 2),
+      recentCalendarJson: JSON.stringify(digestWindow, null, 2),
+      promptTemplate: 'Run the Sunday digest.\n\nPersona description:\n{{persona_text}}\n\nRecent Calendar JSON:\n{{recent_calendar_json}}',
+    };
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || errorData.details || 'Failed to generate digest');
-      }
-
-      const data = await response.json();
-      setDigest(typeof data === 'string' ? data : data.content || null);
-      setActiveTab('digest');
-    } catch (err) {
-      console.error('Digest generation failed:', err);
-      setError(err instanceof Error ? err.message : 'Failed to generate digest');
-    } finally {
-      setIsGeneratingDigest(false);
-    }
+    setDigestRequestData(requestData);
   }, [persona, calendarPayload]);
+
+  const handleDigestComplete = useCallback((result: any) => {
+    setDigest(result.content);
+    setDigestId(result.digestId);
+    setAudioUrl(result.audioUrl);
+    setIsGeneratingDigest(false);
+    setDigestRequestData(null);
+  }, []);
+
+  const handleTestDigest = useCallback(() => {
+    console.log('Generating test digest...');
+    const mockResult = generateMockDigest();
+    console.log('Mock result:', mockResult);
+    
+    // Store the mock digest
+    storeDigest(mockResult.digestId, mockResult.content);
+    
+    // Set the digest data
+    setDigest(mockResult.content);
+    setDigestId(mockResult.digestId);
+    setAudioUrl(mockResult.audioUrl);
+    setActiveTab('digest');
+    
+    console.log('Test digest generated and stored:', mockResult.digestId);
+  }, []);
 
   const handleCreateCalendarEvent = useCallback(async () => {
     if (!digest || !accessToken) return;
@@ -321,10 +338,15 @@ export default function Dashboard() {
         return (
           <DigestPanel 
             digest={digest} 
+            digestId={digestId || undefined}
+            audioUrl={audioUrl || undefined}
             isGenerating={isGeneratingDigest} 
             onGenerate={handleGenerateDigest}
             onCreateEvent={handleCreateCalendarEvent}
             isCreatingEvent={isCreatingEvent}
+            requestData={digestRequestData || undefined}
+            onDigestComplete={handleDigestComplete}
+            onTestDigest={handleTestDigest}
           />
         );
       default:

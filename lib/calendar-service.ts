@@ -546,7 +546,7 @@ Rules:
       event.summary?.toLowerCase().includes('meeting') || 
       event.summary?.toLowerCase().includes('call')
     ).length;
-    const meetingDensityTrend = meetingEvents > totalEvents * 0.6 ? 'high' : 
+    const meetingDensityTrend: 'low' | 'medium' | 'high' = meetingEvents > totalEvents * 0.6 ? 'high' : 
                                meetingEvents > totalEvents * 0.3 ? 'medium' : 'low';
 
     // Productivity windows (times with fewer meetings)
@@ -556,7 +556,7 @@ Rules:
     const socialEvents = [...pastEvents, ...upcomingEvents].filter(event => 
       this.categorizeEvent(event).type === 'social'
     ).length;
-    const socialActivityLevel = socialEvents > totalEvents * 0.2 ? 'high' : 
+    const socialActivityLevel: 'low' | 'medium' | 'high' = socialEvents > totalEvents * 0.2 ? 'high' : 
                                socialEvents > totalEvents * 0.1 ? 'medium' : 'low';
 
     return {
