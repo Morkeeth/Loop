@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 
 import { generateMockDigest } from '@/lib/mock-digest';
-import { storeDigest } from '@/lib/digest-storage';
 
 import { DataSection } from '@/components/DataSection';
 import { DigestPanel } from '@/components/DigestPanel';
@@ -218,21 +217,35 @@ export default function Dashboard() {
     setDigestRequestData(null);
   }, []);
 
-  const handleTestDigest = useCallback(() => {
-    console.log('Generating test digest...');
-    const mockResult = generateMockDigest();
-    console.log('Mock result:', mockResult);
-    
-    // Store the mock digest
-    storeDigest(mockResult.digestId, mockResult.content);
-    
-    // Set the digest data
-    setDigest(mockResult.content);
-    setDigestId(mockResult.digestId);
-    setAudioUrl(mockResult.audioUrl);
-    setActiveTab('digest');
-    
-    console.log('Test digest generated and stored:', mockResult.digestId);
+  const handleTestDigest = useCallback(async () => {
+    try {
+      const mockResult = generateMockDigest();
+      
+      // Store the mock digest via API
+      const response = await fetch('/api/digest/store', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          digestId: mockResult.digestId,
+          content: mockResult.content,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to store test digest');
+      }
+      
+      // Set the digest data
+      setDigest(mockResult.content);
+      setDigestId(mockResult.digestId);
+      setAudioUrl(mockResult.audioUrl);
+      setActiveTab('digest');
+    } catch (error) {
+      console.error('Error generating test digest:', error);
+      setError('Failed to generate test digest');
+    }
   }, []);
 
   const handleCreateCalendarEvent = useCallback(async () => {
@@ -248,10 +261,25 @@ export default function Dashboard() {
       nextSunday.setDate(now.getDate() + (daysUntilSunday === 0 ? 7 : daysUntilSunday));
       nextSunday.setHours(15, 0, 0, 0);
 
+      // Format digest for calendar with proper link titles
+      const formatDigestForCalendar = (content: string) => {
+        return content
+          .replace(/🎧 Listen To Your Digest: (\/digest\/audio\/[^\s]+)/g, '🎧 Listen To Your Digest: [Audio Version]($1)')
+          .replace(/https?:\/\/[^\s]+/g, (url) => {
+            // Extract domain for link title
+            try {
+              const domain = new URL(url).hostname.replace('www.', '');
+              return `[${domain}](${url})`;
+            } catch {
+              return url; // Return original if URL parsing fails
+            }
+          });
+      };
+
       const eventData = {
         summary: 'Circling Back',
         location: 'by Loop',
-        description: digest,
+        description: formatDigestForCalendar(digest),
         start: {
           dateTime: nextSunday.toISOString(),
           timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,

@@ -290,15 +290,21 @@ ${promptBody}`;
         });
 
         const digestId = uuidv4();
+        const audioUrl = `/digest/audio/${digestId}`;
+        
+        // Prepend audio link to the digest content
+        const contentWithAudioLink = `🎧 Listen To Your Digest: ${audioUrl}
+
+${outputText}`;
         
         const digestRecord = {
           id: digestId,
-          content: outputText,
+          content: contentWithAudioLink,
           createdAt: new Date().toISOString(),
         };
 
         try {
-          storeDigest(digestId, outputText);
+          storeDigest(digestId, contentWithAudioLink);
 
           sendLog({
             step: 'storage',
@@ -330,9 +336,9 @@ ${promptBody}`;
         const finalResult = {
           step: 'result',
           data: {
-            content: outputText,
+            content: contentWithAudioLink,
             digestId,
-            audioUrl: `/digest/audio/${digestId}`,
+            audioUrl,
             usage: (response as any).usage,
             metadata: {
               reasoning: (response as any).reasoning,

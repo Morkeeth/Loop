@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { LoadingComment } from '@/types/persona';
 
 interface LoadingScreenProps {
-  onComplete: (persona: any, brief: any) => void;
+  onComplete: (persona: any) => void;
   userId: string;
   events: any[];
 }
@@ -18,7 +18,6 @@ export default function LoadingScreen({ onComplete, userId, events }: LoadingScr
     { name: 'analyzing', label: 'Analyzing your calendar...', duration: 2000 },
     { name: 'processing', label: 'Processing patterns...', duration: 3000 },
     { name: 'generating', label: 'Generating your persona...', duration: 4000 },
-    { name: 'briefing', label: 'Creating your morning brief...', duration: 3000 },
   ];
 
   // Generate simple comments based on calendar data
@@ -113,37 +112,16 @@ export default function LoadingScreen({ onComplete, userId, events }: LoadingScr
           if (personaResponse.ok) {
             const { persona } = await personaResponse.json();
             
-            // Generate brief after persona is complete
-            setTimeout(async () => {
-              try {
-                const briefResponse = await fetch('/api/brief', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ persona, events, userId }),
-                });
-
-                if (briefResponse.ok) {
-                  const { brief } = await briefResponse.json();
-                  
-                  // Complete loading
-                  setTimeout(() => {
-                    onComplete(persona, brief);
-                  }, 1000);
-                }
-              } catch (error) {
-                console.error('Brief generation error:', error);
-                // Complete with mock data if brief fails
-                setTimeout(() => {
-                  onComplete(persona, null);
-                }, 1000);
-              }
-            }, 2000);
+            // Complete loading with persona
+            setTimeout(() => {
+              onComplete(persona);
+            }, 1000);
           }
         } catch (error) {
           console.error('Persona generation error:', error);
           // Complete with mock data if persona fails
           setTimeout(() => {
-            onComplete(null, null);
+            onComplete(null);
           }, 1000);
         }
       }, 3000);
@@ -214,7 +192,7 @@ export default function LoadingScreen({ onComplete, userId, events }: LoadingScr
         )}
 
         {/* Stage Indicators */}
-        <div className="grid grid-cols-4 gap-4">
+        <div className="grid grid-cols-3 gap-4">
           {stages.map((stageItem, index) => (
             <div key={stageItem.name} className="text-center">
               <div className={`w-8 h-8 rounded-full mx-auto mb-2 flex items-center justify-center text-sm font-bold ${
@@ -239,7 +217,6 @@ export default function LoadingScreen({ onComplete, userId, events }: LoadingScr
         <div className="mt-8 text-sm text-gray-500">
           <p>✨ Analyzing {events.length} calendar events</p>
           <p>🧠 Creating your unique persona profile</p>
-          <p>📰 Curating personalized content</p>
         </div>
       </div>
     </div>

@@ -99,7 +99,6 @@ The app will be available at `http://localhost:3000`
 - `GET /api/calendar` - Fetch calendar events
 - `POST /api/calendar` - Create calendar events
 - `POST /api/persona` - Generate user persona
-- `POST /api/brief` - Generate morning brief
 
 ## File Structure
 
@@ -112,17 +111,14 @@ loop-app/
 ├── components/            # React components
 │   ├── LandingHero.tsx   # Landing page hero
 │   ├── LoadingScreen.tsx # Loading experience
-│   ├── PersonaDisplay.tsx # Persona visualization
-│   └── MorningBrief.tsx  # Brief display
+│   └── PersonaDisplay.tsx # Persona visualization
 ├── lib/                   # Utility libraries
 │   ├── google-auth.ts    # Google authentication
 │   ├── calendar-service.ts # Calendar operations
-│   ├── persona-generator.ts # AI persona generation
-│   └── brief-generator.ts # AI brief generation
+│   └── persona-generator.ts # AI persona generation
 ├── types/                 # TypeScript definitions
 │   ├── calendar.ts       # Calendar types
-│   ├── persona.ts       # Persona types
-│   └── brief.ts         # Brief types
+│   └── persona.ts       # Persona types
 └── public/               # Static assets
 ```
 

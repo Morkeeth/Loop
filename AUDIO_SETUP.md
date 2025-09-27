@@ -19,8 +19,8 @@ NEXT_PUBLIC_BASE_URL=http://localhost:3000
 ## Features enabled:
 
 - ✅ Unique digest subpages at `/digest/audio/[id]`
-- ✅ Text-to-speech generation using Marcel's French accent
+- ✅ Text-to-speech generation using ElevenLabs v3 Alpha with French accent voice (Voice ID: sa2z6gEuOalzawBHvrCV)
 - ✅ Big play button for audio playback
-- ✅ Audio link in digest panel after generation
+- ✅ Audio link embedded in digest content
 
 The audio digest feature is now fully integrated and ready to use!
