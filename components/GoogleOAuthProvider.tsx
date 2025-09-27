@@ -20,8 +20,6 @@ export default function GoogleOAuthProviderWrapper({ children }: GoogleOAuthProv
   return (
     <GoogleOAuthProvider 
       clientId={clientId}
-      auto_select={false}
-      cancel_on_tap_outside={false}
     >
       {children}
     </GoogleOAuthProvider>

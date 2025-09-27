@@ -7,6 +7,8 @@ Transform your calendar from a scheduling tool into a personalized life assistan
 - **Google OAuth Integration**: Secure authentication with Google Calendar access
 - **AI-Powered Persona Generation**: GPT-4 analyzes your calendar patterns to create a unique persona profile
 - **Personalized Morning Brief**: Daily briefs with weather, news, opportunities, and reminders
+- **Audio Digest**: Text-to-speech digest generation with Marcel's French accent via ElevenLabs
+- **Real-time Progress Logs**: Live streaming updates showing each step of GPT-5 digest generation
 - **Smart Loading Comments**: Witty AI commentary during calendar analysis
 - **Modern UI**: Beautiful, responsive design with Tailwind CSS
 
@@ -15,6 +17,7 @@ Transform your calendar from a scheduling tool into a personalized life assistan
 - **Frontend**: Next.js 15, React, TypeScript, Tailwind CSS
 - **Authentication**: Google OAuth 2.0
 - **AI**: OpenAI GPT-4 & GPT-4o-mini
+- **Text-to-Speech**: ElevenLabs API with Marcel voice
 - **Calendar**: Google Calendar API
 - **Styling**: Tailwind CSS with custom gradients and animations
 
@@ -23,6 +26,7 @@ Transform your calendar from a scheduling tool into a personalized life assistan
 - Node.js 18+ 
 - Google Cloud Console project with Calendar API enabled
 - OpenAI API key
+- ElevenLabs API key
 - Google OAuth 2.0 credentials
 
 ## ⚙️ Setup
@@ -48,6 +52,8 @@ Transform your calendar from a scheduling tool into a personalized life assistan
    NEXT_PUBLIC_GOOGLE_CLIENT_ID=your_google_client_id
    GOOGLE_CLIENT_SECRET=your_google_client_secret
    OPENAI_API_KEY=your_openai_api_key
+   ELEVENLABS_API_KEY=your_elevenlabs_api_key
+   NEXT_PUBLIC_BASE_URL=http://localhost:3000
    ```
 
 4. **Google Cloud Console Setup**
@@ -107,6 +113,10 @@ loop-labs/
 - `GET /api/calendar` - Fetch user's calendar events
 - `POST /api/persona` - Generate AI persona from calendar data
 - `POST /api/brief` - Generate personalized morning brief
+- `POST /api/digest` - Generate Sunday digest with unique audio link
+- `POST /api/digest/stream` - Generate digest with real-time progress streaming
+- `GET /api/digest/audio/[id]` - Fetch digest by ID
+- `POST /api/digest/audio/generate` - Generate audio version of digest
 
 ## 🎨 Key Features
 
@@ -126,6 +136,21 @@ loop-labs/
 - Today's opportunities
 - Discover section
 - Personalized reminders
+
+### Audio Digest Feature
+- Unique subpage for each digest (`/digest/audio/[id]`)
+- Text-to-speech generation using ElevenLabs API
+- Marcel voice with French accent
+- Big play button for easy audio playback
+- Audio stored as base64 data URLs for immediate playback
+
+### Real-time Progress Logs
+- Live streaming updates during GPT-5 digest generation
+- Step-by-step progress indicators (parsing, validation, prompt loading, etc.)
+- Visual progress bar with percentage completion
+- Real-time status updates with timestamps
+- Error handling with detailed feedback
+- Server-Sent Events (SSE) for efficient streaming
 
 ## 🚧 Development Notes
 

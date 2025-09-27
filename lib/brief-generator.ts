@@ -1,11 +1,42 @@
 import OpenAI from 'openai';
-import { MorningBrief, PersonaProfile, ProcessedEvent, SourceAttribution, NewsArticle, Opportunity, DiscoverItem, Reminder } from '@/types/brief';
+import { MorningBrief, SourceAttribution, NewsArticle, Opportunity, DiscoverItem, Reminder } from '@/types/brief';
+import { PersonaProfile } from '@/types/persona';
+import { ProcessedEvent } from '@/types/calendar';
 import { SourceValidator } from './source-validator';
 import { EventAPIManager } from './event-apis';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
+
+interface SearchResult {
+  title: string;
+  snippet: string;
+  url: string;
+  source?: string;
+  venue?: string;
+  venueUrl?: string;
+  ticketUrl?: string;
+  eventUrl?: string;
+  publishedAt?: string;
+  category?: string;
+  temperature?: number;
+  condition?: string;
+  description?: string;
+  humidity?: number;
+  windSpeed?: number;
+  sourceUrl?: string;
+  sourceName?: string;
+  date?: string;
+  location?: string;
+  organizer?: {
+    name: string;
+    website?: string;
+    contact?: string;
+  };
+  price?: string;
+  icon?: string;
+}
 
 export class BriefGenerator {
   private persona: PersonaProfile;
@@ -16,6 +47,50 @@ export class BriefGenerator {
     this.persona = persona;
     this.events = events;
     this.userId = userId;
+  }
+
+  private getPrimaryLocation(): string {
+    return (
+      this.persona.location?.primaryLocation ||
+      this.persona.location?.frequentLocations?.[0] ||
+      'San Francisco, CA'
+    );
+  }
+
+  private getProfessionDescriptor(): string {
+    return (
+      this.persona.professional?.jobTitle ||
+      this.persona.professional?.industry ||
+      'Technology Professional'
+    );
+  }
+
+  private getInterestList(): string[] {
+    const interests = this.persona.interests;
+    if (!interests) {
+      return ['technology'];
+    }
+
+    const combined = [
+      ...(interests.hobbies ?? []),
+      ...(interests.sports ?? []),
+      ...(interests.recurringActivities ?? []),
+      ...(interests.entertainment ?? []),
+    ]
+      .map((item) => (typeof item === 'string' ? item : ''))
+      .filter((item): item is string => Boolean(item?.trim()))
+      .map((item) => item.trim());
+
+    return combined.length ? combined : ['technology'];
+  }
+
+  private getInterestsSummary(): string {
+    const interests = this.getInterestList();
+    return interests.join(' ');
+  }
+
+  private getGreetingName(): string {
+    return this.persona.professional?.jobTitle?.split(' ')[0] || 'there';
   }
 
   // Helper method to create source attribution with validation
@@ -47,7 +122,7 @@ export class BriefGenerator {
       // For now, we'll simulate the structure
       const searchResults = await this.performWebSearch(query);
       
-      return searchResults.map((result: any) => ({
+      return searchResults.map((result: SearchResult) => ({
         title: result.title,
         summary: result.snippet,
         url: result.url,
@@ -73,7 +148,7 @@ export class BriefGenerator {
       const query = `events ${location} ${interests.join(' ')} today`;
       const searchResults = await this.performWebSearch(query);
       
-      return searchResults.map((result: any) => ({
+      return searchResults.map((result: SearchResult) => ({
         title: result.title,
         description: result.snippet,
         date: result.date || new Date().toISOString().split('T')[0],
@@ -108,7 +183,7 @@ export class BriefGenerator {
       const weatherResults = await this.performWebSearch(weatherQuery);
       
       if (weatherResults.length > 0) {
-        const weather = weatherResults[0];
+        const weather = weatherResults[0] as SearchResult;
         return {
           location,
           temperature: weather.temperature || 72,
@@ -164,7 +239,7 @@ export class BriefGenerator {
   }
 
   // Real web search using GPT-5's web browsing capabilities
-  private async performWebSearch(query: string): Promise<any[]> {
+  private async performWebSearch(query: string): Promise<SearchResult[]> {
     console.log(`Performing real web search for: ${query}`);
     
     try {
@@ -232,8 +307,9 @@ export class BriefGenerator {
           
           return searchResults;
 
-        } catch (modelError) {
-          console.log(`Failed with ${model}:`, modelError.message);
+        } catch (modelError: unknown) {
+          const errorMessage = modelError instanceof Error ? modelError.message : String(modelError);
+          console.log(`Failed with ${model}:`, errorMessage);
           if (model === 'gpt-5') {
             continue; // Try GPT-4o next
           } else {
@@ -250,15 +326,14 @@ export class BriefGenerator {
       
       // Fallback to enhanced mock data if web search fails
       console.log('Falling back to enhanced mock data');
-      return this.generateEnhancedMockData(query);
+      return await this.generateEnhancedMockData(query);
     }
   }
 
-  // Enhanced mock data as fallback (better than before)
-  private generateEnhancedMockData(query: string): any[] {
+  private async generateEnhancedMockData(query: string): Promise<SearchResult[]> {
     const today = new Date();
-    const location = this.persona.location || 'San Francisco, CA';
-    const profession = this.persona.profession?.toLowerCase() || 'technology';
+    const location = this.getPrimaryLocation();
+    const profession = this.getProfessionDescriptor().toLowerCase();
     
     if (query.includes('news')) {
       return this.generateIndustryNews(query, today);
@@ -269,16 +344,16 @@ export class BriefGenerator {
     }
     
     if (query.includes('events')) {
-      return this.generateEventContent(query, today);
+      return await this.generateEventContent(query, today);
     }
     
     return this.generateRelevantContent(query, today);
   }
 
   // Generate industry-specific news content
-  private generateIndustryNews(query: string, today: Date): any[] {
-    const profession = this.persona.profession?.toLowerCase() || 'technology';
-    const industryNews = {
+  private generateIndustryNews(query: string, today: Date): SearchResult[] {
+    const profession = this.getProfessionDescriptor().toLowerCase();
+    const industryNews: Record<string, SearchResult[]> = {
       'technology': [
         {
           title: 'AI Development Trends Shaping 2024',
@@ -331,36 +406,28 @@ export class BriefGenerator {
   }
 
   // Generate weather content
-  private generateWeatherContent(query: string): any[] {
-    const location = this.persona.location || 'San Francisco, CA';
+  private generateWeatherContent(query: string): SearchResult[] {
+    const location = this.getPrimaryLocation();
     const today = new Date();
     
     // Generate realistic weather based on location and season
     const seasonalWeather = this.getSeasonalWeather(location, today);
     
-    return [{
-      temperature: seasonalWeather.temperature,
-      condition: seasonalWeather.condition,
-      description: seasonalWeather.description,
-      humidity: seasonalWeather.humidity,
-      windSpeed: seasonalWeather.windSpeed,
-      sourceUrl: 'https://weather.com',
-      sourceName: 'Weather.com'
-    }];
+    return [seasonalWeather];
   }
 
   // Generate event content
-  private generateEventContent(query: string, today: Date): any[] {
-    const location = this.persona.location || 'San Francisco, CA';
-    const interests = this.persona.interests || ['technology', 'business'];
+  private async generateEventContent(query: string, today: Date): Promise<SearchResult[]> {
+    const location = this.getPrimaryLocation();
+    const interests = this.getInterestList();
     
-    return this.generateLocalEvents(location, interests, today);
+    return await this.generateLocalEvents(location, interests, today);
   }
 
   // Generate relevant content based on persona
-  private generateRelevantContent(query: string, today: Date): any[] {
-    const interests = this.persona.interests || ['technology'];
-    const profession = this.persona.profession || 'Technology Professional';
+  private generateRelevantContent(query: string, today: Date): SearchResult[] {
+    const interests = this.getInterestList();
+    const profession = this.getProfessionDescriptor();
     
     return [
       {
@@ -375,27 +442,46 @@ export class BriefGenerator {
   }
 
   // Generate seasonal weather data
-  private getSeasonalWeather(location: string, date: Date): any {
+  private getSeasonalWeather(location: string, date: Date): SearchResult {
+    const createWeatherResult = (
+      temperature: number,
+      condition: string,
+      description: string,
+      humidity: number,
+      windSpeed: number
+    ): SearchResult => ({
+      title: `${location} weather today`,
+      snippet: description,
+      url: 'https://weather.com',
+      temperature,
+      condition,
+      description,
+      humidity,
+      windSpeed,
+      sourceUrl: 'https://weather.com',
+      sourceName: 'Weather.com',
+    });
+
     const month = date.getMonth();
-    const isWestCoast = location.toLowerCase().includes('san francisco') || 
-                       location.toLowerCase().includes('seattle') || 
-                       location.toLowerCase().includes('los angeles');
-    
+    const lowerLocation = location.toLowerCase();
+    const isWestCoast =
+      lowerLocation.includes('san francisco') ||
+      lowerLocation.includes('seattle') ||
+      lowerLocation.includes('los angeles');
+
     if (isWestCoast) {
-      // West Coast weather patterns
-      if (month >= 11 || month <= 2) { // Winter
-        return { temperature: 58, condition: 'Partly Cloudy', description: 'Mild winter weather with occasional rain', humidity: 65, windSpeed: 8 };
-      } else if (month >= 3 && month <= 5) { // Spring
-        return { temperature: 65, condition: 'Sunny', description: 'Pleasant spring weather', humidity: 55, windSpeed: 6 };
-      } else if (month >= 6 && month <= 8) { // Summer
-        return { temperature: 72, condition: 'Sunny', description: 'Warm summer weather', humidity: 45, windSpeed: 5 };
-      } else { // Fall
-        return { temperature: 68, condition: 'Partly Cloudy', description: 'Comfortable fall weather', humidity: 60, windSpeed: 7 };
+      if (month >= 11 || month <= 2) {
+        return createWeatherResult(58, 'Partly Cloudy', 'Mild winter weather with occasional rain', 65, 8);
+      } else if (month >= 3 && month <= 5) {
+        return createWeatherResult(65, 'Sunny', 'Pleasant spring weather', 55, 6);
+      } else if (month >= 6 && month <= 8) {
+        return createWeatherResult(72, 'Sunny', 'Warm summer weather', 45, 5);
+      } else {
+        return createWeatherResult(68, 'Partly Cloudy', 'Comfortable fall weather', 60, 7);
       }
-    } else {
-      // Default weather
-      return { temperature: 70, condition: 'Partly Cloudy', description: 'Pleasant weather conditions', humidity: 50, windSpeed: 6 };
     }
+
+    return createWeatherResult(70, 'Partly Cloudy', 'Pleasant weather conditions', 50, 6);
   }
 
   // Generate local events using real APIs
@@ -438,7 +524,7 @@ export class BriefGenerator {
 
   // Enhanced mock events (better than before)
   private generateEnhancedMockEvents(location: string, interests: string[], today: Date): any[] {
-    const events = [];
+    const events: Array<{ title: string; snippet: string; url: string; venue: string; date: string; location: string; category: string; eventUrl: string; ticketUrl: string; organizer: string; price: string; }> = [];
     const dayOfWeek = today.toLocaleDateString('en-US', { weekday: 'long' });
     
     interests.forEach(interest => {
@@ -507,7 +593,8 @@ export class BriefGenerator {
       'engineering': 'https://www.engineering.com'
     };
     
-    return urlMap[profession.toLowerCase()] || urlMap['technology'];
+    const key = profession.toLowerCase() as keyof typeof urlMap;
+    return urlMap[key] || urlMap['technology'];
   }
 
   // Helper method to calculate relevance score
@@ -535,20 +622,20 @@ export class BriefGenerator {
   async generateBrief(): Promise<MorningBrief> {
     try {
       // Fetch real-time data first
-      const location = this.persona.location || 'San Francisco, CA';
+      const location = this.getPrimaryLocation();
       
       // Get weather data
       const weather = await this.getWeatherData(location);
       
       // Search for industry news
       const industryNews = await this.searchNews(
-        `${this.persona.profession} news today`,
+        `${this.getProfessionDescriptor()} news today`,
         'industry'
       );
       
       // Search for hobby/interest news
       const hobbyNews = await this.searchNews(
-        `${this.persona.interests?.join(' ') || 'technology'} news today`,
+        `${this.getInterestsSummary() || 'technology'} news today`,
         'hobby'
       );
       
@@ -561,7 +648,7 @@ export class BriefGenerator {
       // Search for local events
       const discoverItems = await this.searchLocalEvents(
         location,
-        this.persona.interests || ['technology', 'business']
+        this.getInterestList()
       );
       
       // Generate opportunities based on calendar
@@ -603,7 +690,7 @@ export class BriefGenerator {
         reminders,
         
         greeting: {
-          personalized: `Good morning ${this.persona.name || 'there'}!`,
+          personalized: `Good morning ${this.getGreetingName()}!`,
           mood: this.determineMood(),
           motivationalMessage: this.generateMotivationalMessage()
         },
@@ -628,9 +715,9 @@ export class BriefGenerator {
   private async generateOpportunities(): Promise<Opportunity[]> {
     const freeTimeSlots = this.findFreeTimeSlots();
     const opportunities: Opportunity[] = [];
-    const profession = this.persona.profession?.toLowerCase() || 'technology';
-    const interests = this.persona.interests || ['technology'];
-    const location = this.persona.location || 'San Francisco, CA';
+    const profession = this.getProfessionDescriptor().toLowerCase();
+    const interests = this.getInterestList();
+    const location = this.getPrimaryLocation();
     
     freeTimeSlots.forEach(slot => {
       // Generate profession-specific opportunities
