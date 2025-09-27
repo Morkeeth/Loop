@@ -1,79 +1,100 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import PersonaDisplay from '@/components/PersonaDisplay';
-import MorningBrief from '@/components/MorningBrief';
-import LoadingScreen from '@/components/LoadingScreen';
-import { PersonaProfile } from '@/types/persona';
-import { MorningBrief as MorningBriefType } from '@/types/brief';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+
+import { DataSection } from '@/components/DataSection';
+import { DigestPanel } from '@/components/DigestPanel';
+import { InsightsBanner } from '@/components/InsightsBanner';
+import { PersonaPanel } from '@/components/PersonaPanel';
+
+type TabId = 'events' | 'persona' | 'digest';
+
+interface CalendarPayload {
+  events: any[];
+  minified: any[];
+  insights: string[];
+  timeframe: { start: string; end: string } | null;
+  count: number;
+  monthsBack: number;
+}
 
 export default function Dashboard() {
-  const [isLoading, setIsLoading] = useState(true);
-  const [persona, setPersona] = useState<PersonaProfile | null>(null);
-  const [brief, setBrief] = useState<MorningBriefType | null>(null);
+  const [accessToken, setAccessToken] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<TabId>('events');
+  const [calendarPayload, setCalendarPayload] = useState<CalendarPayload | null>(null);
+  const [isLoadingCalendar, setIsLoadingCalendar] = useState(false);
+  const [isLoadingInsights, setIsLoadingInsights] = useState(false);
+  const [insightTick, setInsightTick] = useState(0);
+  const [persona, setPersona] = useState<any | null>(null);
+  const [isGeneratingPersona, setIsGeneratingPersona] = useState(false);
+  const [digest, setDigest] = useState<string | null>(null);
+  const [isGeneratingDigest, setIsGeneratingDigest] = useState(false);
+  const [isCreatingEvent, setIsCreatingEvent] = useState(false);
+  const [showMinified, setShowMinified] = useState(true);
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   useEffect(() => {
-    // Check if user is authenticated (in a real app, you'd check session/token)
-    const userEmail = localStorage.getItem('userEmail');
-    if (!userEmail) {
-      router.push('/');
+    // Get access token from URL params (from OAuth callback)
+    const token = searchParams.get('access_token');
+    const userEmail = searchParams.get('user_email');
+    const userName = searchParams.get('user_name');
+    const authError = searchParams.get('error');
+
+    if (authError) {
+      setError(`Authentication failed: ${authError}`);
       return;
     }
 
-    // Fetch calendar events and generate persona/brief
-    const initializeDashboard = async () => {
-      try {
-        // For demo purposes, we'll use mock data
-        // In a real app, you'd fetch from Google Calendar API
-        const mockEvents = generateMockEvents();
-        
-        // Simulate the loading process
-        setIsLoading(true);
-        
-        // The LoadingScreen component will handle the actual API calls
-        // For now, we'll just show the loading screen
-        setTimeout(() => {
-          setIsLoading(false);
-          // Set mock data for demo
-          setPersona(generateMockPersona());
-          setBrief(generateMockBrief());
-        }, 3000);
-
-      } catch (error) {
-        console.error('Dashboard initialization error:', error);
-        setError('Failed to load dashboard data');
-        setIsLoading(false);
+    if (token) {
+      setAccessToken(token);
+      // Store user info in localStorage for demo purposes
+      if (userEmail) {
+        localStorage.setItem('userEmail', userEmail);
       }
-    };
+      if (userName) {
+        localStorage.setItem('userName', userName);
+      }
+      // Store access token in localStorage (in production, use secure storage)
+      localStorage.setItem('accessToken', token);
+      
+      // Clean up URL by removing the token parameters
+      const cleanUrl = new URL(window.location.href);
+      cleanUrl.searchParams.delete('access_token');
+      cleanUrl.searchParams.delete('refresh_token');
+      cleanUrl.searchParams.delete('user_email');
+      cleanUrl.searchParams.delete('user_name');
+      window.history.replaceState({}, '', cleanUrl.toString());
+    } else {
+      // Check if we have a stored access token
+      const storedToken = localStorage.getItem('accessToken');
+      if (storedToken) {
+        setAccessToken(storedToken);
+      } else {
+        // No token available, redirect to login
+        router.push('/');
+      }
+    }
+  }, [searchParams, router]);
 
-    initializeDashboard();
-  }, [router]);
-
-  const handleLoadingComplete = (personaData: PersonaProfile | null, briefData: MorningBriefType | null) => {
-    setPersona(personaData);
-    setBrief(briefData);
-    setIsLoading(false);
+  const handleSignOut = () => {
+    localStorage.removeItem('accessToken');
+    localStorage.removeItem('userEmail');
+    localStorage.removeItem('userName');
+    router.push('/');
   };
-
-  if (isLoading) {
-    return <LoadingScreen onComplete={handleLoadingComplete} userId="demo-user" events={[]} />;
-  }
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex items-center justify-center px-6">
+      <div className="min-h-screen bg-white flex items-center justify-center px-6">
         <div className="max-w-md mx-auto text-center">
-          <div className="w-16 h-16 bg-red-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
-            <span className="text-red-600 text-2xl">⚠️</span>
-          </div>
-          <h1 className="text-2xl font-bold text-gray-900 mb-4">Something went wrong</h1>
+          <h1 className="text-xl font-bold mb-4">Authentication Error</h1>
           <p className="text-gray-600 mb-6">{error}</p>
           <button 
             onClick={() => router.push('/')}
-            className="px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl font-medium hover:shadow-lg transition-shadow"
+            className="minimal-button"
           >
             Back to Home
           </button>
@@ -82,232 +103,302 @@ export default function Dashboard() {
     );
   }
 
+  const fetchCalendar = useCallback(async () => {
+    if (!accessToken) return;
+
+    try {
+      setIsLoadingCalendar(true);
+      setIsLoadingInsights(true);
+
+      const response = await fetch(
+        `/api/calendar?accessToken=${encodeURIComponent(accessToken)}&monthsBack=6&insights=true`
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+
+        if (response.status === 401 || response.status === 403) {
+          localStorage.removeItem('accessToken');
+          localStorage.removeItem('userEmail');
+          localStorage.removeItem('userName');
+          window.location.href = '/';
+          return;
+        }
+
+        throw new Error(errorData.message || `Failed to fetch calendar data: ${response.status}`);
+      }
+
+      const payload = await response.json();
+      setCalendarPayload(payload);
+      setInsightTick((tick) => tick + 1);
+    } catch (err) {
+      console.error('Error fetching calendar data:', err);
+      setError(err instanceof Error ? err.message : 'Failed to fetch calendar data');
+    } finally {
+      setIsLoadingCalendar(false);
+      setIsLoadingInsights(false);
+    }
+  }, [accessToken]);
+
+  useEffect(() => {
+    if (!accessToken) return;
+    fetchCalendar();
+  }, [accessToken, fetchCalendar]);
+
+  const handleGeneratePersona = useCallback(async () => {
+    if (!calendarPayload) return;
+
+    try {
+      setIsGeneratingPersona(true);
+      const response = await fetch('/api/persona', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          calendarData: {
+            now_iso: new Date().toISOString(),
+            default_timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+            calendars: [{ id: 'primary', summary: 'Primary Calendar' }],
+            events: calendarPayload.minified,
+          },
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || errorData.details || 'Failed to generate persona');
+      }
+
+      const data = await response.json();
+      setPersona(data);
+      setActiveTab('persona');
+    } catch (err) {
+      console.error('Persona generation failed:', err);
+      setError(err instanceof Error ? err.message : 'Failed to generate persona');
+    } finally {
+      setIsGeneratingPersona(false);
+    }
+  }, [calendarPayload]);
+
+  const handleGenerateDigest = useCallback(async () => {
+    if (!persona || !calendarPayload) {
+      setActiveTab('persona');
+      return;
+    }
+
+    try {
+      setIsGeneratingDigest(true);
+
+      const response = await fetch('/api/digest', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          personaText: JSON.stringify(persona, null, 2),
+          recentCalendarJson: JSON.stringify(calendarPayload.minified, null, 2),
+          promptTemplate: 'Run the Sunday digest.\n\nPersona description:\n{{persona_text}}\n\nRecent Calendar JSON:\n{{recent_calendar_json}}',
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || errorData.details || 'Failed to generate digest');
+      }
+
+      const data = await response.json();
+      setDigest(typeof data === 'string' ? data : data.content || null);
+      setActiveTab('digest');
+    } catch (err) {
+      console.error('Digest generation failed:', err);
+      setError(err instanceof Error ? err.message : 'Failed to generate digest');
+    } finally {
+      setIsGeneratingDigest(false);
+    }
+  }, [persona, calendarPayload]);
+
+  const handleCreateCalendarEvent = useCallback(async () => {
+    if (!digest || !accessToken) return;
+
+    try {
+      setIsCreatingEvent(true);
+
+      // Calculate next Sunday at 15:00
+      const now = new Date();
+      const daysUntilSunday = (7 - now.getDay()) % 7;
+      const nextSunday = new Date(now);
+      nextSunday.setDate(now.getDate() + (daysUntilSunday === 0 ? 7 : daysUntilSunday));
+      nextSunday.setHours(15, 0, 0, 0);
+
+      const eventData = {
+        summary: 'Circling Back',
+        location: 'by Loop',
+        description: digest,
+        start: {
+          dateTime: nextSunday.toISOString(),
+          timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        },
+        end: {
+          dateTime: new Date(nextSunday.getTime() + 60 * 60 * 1000).toISOString(), // 1 hour duration
+          timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        },
+      };
+
+      const response = await fetch('/api/calendar', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          accessToken,
+          eventData,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to create calendar event');
+      }
+
+      const result = await response.json();
+      console.log('Calendar event created:', result);
+      
+      // Show success message (you could add a toast notification here)
+      alert('Calendar event created successfully!');
+      
+    } catch (err) {
+      console.error('Calendar event creation failed:', err);
+      setError(err instanceof Error ? err.message : 'Failed to create calendar event');
+    } finally {
+      setIsCreatingEvent(false);
+    }
+  }, [digest, accessToken]);
+
+  const tabItems: Array<{ id: TabId; label: string }> = useMemo(
+    () => [
+      { id: 'events', label: 'Calendar JSON' },
+      { id: 'persona', label: 'Persona' },
+      { id: 'digest', label: 'Sunday Digest' },
+    ],
+    [],
+  );
+
+  const renderTab = () => {
+    if (!calendarPayload) {
+      return (
+        <div className="rounded border border-dashed border-gray-300 bg-gray-50 p-10 text-center text-sm text-gray-500">
+          Loading calendar history…
+        </div>
+      );
+    }
+
+    switch (activeTab) {
+      case 'events':
+        return (
+          <DataSection
+            title="Calendar Events"
+            description={
+              calendarPayload.timeframe
+                ? `Showing ${calendarPayload.count} events between ${new Date(calendarPayload.timeframe.start).toLocaleDateString()} and ${new Date(calendarPayload.timeframe.end).toLocaleDateString()}`
+                : undefined
+            }
+            json={calendarPayload.events}
+            minified={calendarPayload.minified}
+            isMinified={showMinified}
+            onToggleMinified={() => setShowMinified((value) => !value)}
+          />
+        );
+      case 'persona':
+        return (
+          <PersonaPanel
+            persona={persona}
+            onGenerate={handleGeneratePersona}
+            isGenerating={isGeneratingPersona}
+          />
+        );
+      case 'digest':
+        return (
+          <DigestPanel 
+            digest={digest} 
+            isGenerating={isGeneratingDigest} 
+            onGenerate={handleGenerateDigest}
+            onCreateEvent={handleCreateCalendarEvent}
+            isCreatingEvent={isCreatingEvent}
+          />
+        );
+      default:
+        return null;
+    }
+  };
+
+  if (!accessToken) {
+    return (
+      <div className="min-h-screen bg-white flex items-center justify-center">
+        <div className="text-center">
+          <h2 className="text-lg font-medium mb-2">Loading...</h2>
+          <p className="text-gray-600">Setting up your calendar access...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
-      {/* Navigation */}
-      <nav className="px-6 py-4 bg-white/80 backdrop-blur-sm border-b border-gray-200">
-        <div className="max-w-7xl mx-auto flex justify-between items-center">
-          <div className="flex items-center space-x-2">
-            <div className="w-8 h-8 bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg flex items-center justify-center">
-              <span className="text-white font-bold text-lg">L</span>
-            </div>
-            <span className="text-xl font-bold text-gray-900">Loop</span>
+    <div className="min-h-screen bg-white">
+      <div className="border-b border-gray-200 px-6 py-4">
+        <div className="max-w-6xl mx-auto flex justify-between items-center">
+          <div>
+            <h1 className="text-lg font-semibold text-gray-900">Loop Labs</h1>
+            <p className="text-xs uppercase tracking-wide text-gray-400">Calendar intelligence sandbox</p>
           </div>
-          <div className="flex items-center space-x-4">
-            <span className="text-sm text-gray-600">
-              Welcome back! 👋
-            </span>
-            <button 
-              onClick={() => router.push('/')}
-              className="px-4 py-2 text-gray-600 hover:text-gray-900 transition-colors"
+          <div className="flex items-center gap-3">
+            <button
+              onClick={fetchCalendar}
+              className="text-sm text-gray-600 hover:text-black"
+            >
+              Refresh
+            </button>
+            <button
+              onClick={handleSignOut}
+              className="text-sm text-gray-600 hover:text-black"
             >
               Sign Out
             </button>
           </div>
         </div>
-      </nav>
-
-      {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-6 py-8">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Your Daily Loop</h1>
-          <p className="text-gray-600">Personalized insights and opportunities for today</p>
-        </div>
-
-        <div className="grid lg:grid-cols-3 gap-8">
-          {/* Morning Brief - Takes up 2 columns */}
-          <div className="lg:col-span-2">
-            {brief && <MorningBrief brief={brief} />}
-          </div>
-
-          {/* Persona Display - Takes up 1 column */}
-          <div className="lg:col-span-1">
-            {persona && <PersonaDisplay persona={persona} />}
-          </div>
-        </div>
-
-        {/* Quick Actions */}
-        <div className="mt-8 bg-white rounded-2xl shadow-lg p-6 border border-gray-100">
-          <h2 className="text-xl font-bold text-gray-900 mb-4">Quick Actions</h2>
-          <div className="grid md:grid-cols-3 gap-4">
-            <button className="p-4 border border-gray-200 rounded-xl hover:shadow-md transition-shadow text-left">
-              <div className="text-2xl mb-2">📅</div>
-              <h3 className="font-semibold text-gray-900">Add Event</h3>
-              <p className="text-sm text-gray-600">Create a new calendar event</p>
-            </button>
-            <button className="p-4 border border-gray-200 rounded-xl hover:shadow-md transition-shadow text-left">
-              <div className="text-2xl mb-2">🔄</div>
-              <h3 className="font-semibold text-gray-900">Refresh Brief</h3>
-              <p className="text-sm text-gray-600">Update your daily briefing</p>
-            </button>
-            <button className="p-4 border border-gray-200 rounded-xl hover:shadow-md transition-shadow text-left">
-              <div className="text-2xl mb-2">⚙️</div>
-              <h3 className="font-semibold text-gray-900">Settings</h3>
-              <p className="text-sm text-gray-600">Customize your preferences</p>
-            </button>
-          </div>
-        </div>
       </div>
+
+      <main className="max-w-6xl mx-auto px-6 py-6 space-y-6">
+        {calendarPayload ? (
+          <InsightsBanner insights={calendarPayload.insights} isLoading={isLoadingInsights} key={insightTick} />
+        ) : null}
+
+        <nav className="flex flex-wrap gap-2">
+          {tabItems.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`rounded-full border px-4 py-2 text-sm font-medium transition ${
+                activeTab === tab.id
+                  ? 'border-gray-900 bg-gray-900 text-white'
+                  : 'border-gray-200 bg-white text-gray-700 hover:border-gray-900 hover:text-black'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </nav>
+
+        <section className="min-h-[420px] space-y-6">
+          {isLoadingCalendar ? (
+            <div className="rounded border border-dashed border-gray-300 bg-gray-50 p-10 text-center text-sm text-gray-500">
+              Fetching the last six months from Google Calendar…
+            </div>
+          ) : (
+            renderTab()
+          )}
+        </section>
+      </main>
     </div>
   );
-}
-
-// Mock data generators for demo purposes
-function generateMockEvents() {
-  return [
-    {
-      id: '1',
-      summary: 'Team Standup',
-      category: { type: 'work', confidence: 0.9, keywords: ['standup', 'team'] },
-      duration: 30,
-      participants: ['john@company.com', 'jane@company.com'],
-      isRecurring: true,
-      locationType: 'virtual'
-    },
-    {
-      id: '2',
-      summary: 'Gym Session',
-      category: { type: 'health', confidence: 0.8, keywords: ['gym', 'fitness'] },
-      duration: 60,
-      participants: [],
-      isRecurring: true,
-      locationType: 'venue'
-    }
-  ];
-}
-
-function generateMockPersona(): PersonaProfile {
-  return {
-    id: 'persona_demo_1',
-    userId: 'demo-user',
-    generatedAt: new Date().toISOString(),
-    professional: {
-      jobTitle: 'Software Engineer',
-      industry: 'Technology',
-      workPattern: 'morning',
-      meetingFrequency: 'medium',
-      workLocation: 'hybrid',
-      workHours: { start: '09:00', end: '17:00' }
-    },
-    education: {
-      isStudent: false,
-      fieldOfStudy: undefined,
-      classSchedule: [],
-      academicLevel: undefined
-    },
-    interests: {
-      hobbies: ['Reading', 'Photography', 'Cooking'],
-      sports: ['Running', 'Tennis'],
-      recurringActivities: ['Gym', 'Coffee meetings'],
-      entertainment: ['Movies', 'Concerts']
-    },
-    social: {
-      frequentContacts: ['john@company.com', 'jane@company.com'],
-      socialEventFrequency: 'medium',
-      relationshipStatus: 'single',
-      socialPreferences: ['Small groups', 'Outdoor activities']
-    },
-    schedule: {
-      wakeTime: '07:00',
-      sleepTime: '23:00',
-      busyPeriods: ['09:00-12:00', '14:00-17:00'],
-      freeTimeSlots: ['12:00-14:00', '18:00-23:00'],
-      timeZone: 'PST'
-    },
-    location: {
-      primaryLocation: 'San Francisco, CA',
-      travelPatterns: ['Weekend trips'],
-      frequentLocations: ['Office', 'Gym', 'Coffee shops']
-    },
-    lifestyle: {
-      exerciseRoutine: ['Morning runs', 'Evening gym'],
-      diningPreferences: ['Healthy', 'International cuisine'],
-      entertainmentChoices: ['Movies', 'Live music'],
-      healthHabits: ['Regular exercise', 'Meditation']
-    },
-    personality: {
-      traits: ['Organized', 'Social', 'Health-conscious'],
-      communicationStyle: 'Direct',
-      productivityStyle: 'Morning person',
-      stressIndicators: ['Back-to-back meetings']
-    },
-    confidence: {
-      overall: 0.85,
-      professional: 0.9,
-      social: 0.8,
-      lifestyle: 0.85
-    }
-  };
-}
-
-function generateMockBrief(): MorningBriefType {
-  return {
-    id: 'brief_demo_1',
-    userId: 'demo-user',
-    date: new Date().toISOString().split('T')[0],
-    generatedAt: new Date().toISOString(),
-    weather: {
-      location: 'San Francisco, CA',
-      temperature: 72,
-      condition: 'Partly Cloudy',
-      description: 'Perfect weather for outdoor activities',
-      icon: '⛅',
-      humidity: 65,
-      windSpeed: 8
-    },
-    news: {
-      industryNews: [
-        {
-          title: 'New AI Framework Released',
-          summary: 'Latest developments in machine learning frameworks',
-          url: 'https://example.com',
-          relevance: 0.9
-        }
-      ],
-      hobbyNews: [
-        {
-          title: 'Photography Workshop This Weekend',
-          summary: 'Learn advanced techniques from professionals',
-          url: 'https://example.com',
-          relevance: 0.8
-        }
-      ],
-      localNews: []
-    },
-    opportunities: [
-      {
-        title: 'Coffee Chat with Team',
-        description: 'Perfect time for informal team bonding',
-        timeSlot: '12:00-13:00',
-        location: 'Local Coffee Shop',
-        type: 'meeting',
-        relevance: 0.85,
-        actionRequired: false
-      }
-    ],
-    discover: [
-      {
-        title: 'Tech Meetup: AI & ML',
-        description: 'Network with fellow developers',
-        date: 'Tomorrow',
-        location: 'Downtown SF',
-        category: 'Professional',
-        relevance: 0.9,
-        url: 'https://example.com'
-      }
-    ],
-    reminders: [
-      {
-        title: 'Team Standup',
-        time: '09:00',
-        priority: 'high',
-        type: 'meeting'
-      }
-    ],
-    greeting: {
-      personalized: 'Good morning! Ready to tackle another productive day?',
-      mood: 'energetic',
-      motivationalMessage: 'Your calendar shows you\'re a morning person - perfect time to tackle your most important tasks!'
-    }
-  };
 }

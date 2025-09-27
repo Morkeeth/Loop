@@ -1,10 +1,126 @@
+import fs from 'fs';
+import path from 'path';
+import OpenAI from 'openai';
+
 import { CalendarEvent, ProcessedEvent, EventCategory } from '@/types/calendar';
+import { CalendarTrends } from '@/types/digest-context';
 
 export class CalendarService {
   private accessToken: string;
+  private static miniClient: OpenAI | null = null;
+  private static insightPrompt: string | null = null;
 
   constructor(accessToken: string) {
     this.accessToken = accessToken;
+  }
+
+  private static getMiniClient() {
+    if (!process.env.OPENAI_API_KEY) {
+      throw new Error('OpenAI API key not configured');
+    }
+
+    if (!CalendarService.miniClient) {
+      CalendarService.miniClient = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    }
+
+    return CalendarService.miniClient;
+  }
+
+  private static async getInsightPrompt() {
+    if (CalendarService.insightPrompt) {
+      return CalendarService.insightPrompt;
+    }
+
+    const promptPath = path.join(process.cwd(), 'loop-project-spec.md');
+    let raw = '';
+
+    try {
+      raw = await fs.promises.readFile(promptPath, 'utf8');
+    } catch (error) {
+      raw = '';
+    }
+
+    const match = raw.match(/\*\*GPT-Mini Commentary During Processing:\*\*[\s\S]*?(?=###|$)/);
+    const examples = match ? match[0] : '';
+
+    CalendarService.insightPrompt = `You are Loop's mini commentator. Generate 3 short energetic insights about a user's identity inferred from calendar events. Be witty but kind. Use quick takes similar to these:
+${examples}
+
+Rules:
+- Output a JSON array of strings (no markdown, no explanations).
+- Each string ≤ 120 characters.
+- Reference patterns, hobbies, or routines visible in the events.
+- Avoid sensitive topics (health, politics, religion, demographics).
+- If signals are weak, acknowledge light data.
+`;
+
+    return CalendarService.insightPrompt;
+  }
+
+  private summarizeForInsights(events: CalendarEvent[]) {
+    const sorted = [...events].sort((a, b) => {
+      const aStart = a.start?.dateTime || a.start?.date || '';
+      const bStart = b.start?.dateTime || b.start?.date || '';
+      return new Date(bStart).getTime() - new Date(aStart).getTime();
+    });
+
+    const recent = sorted.slice(0, 60); // latest 60 events for quick signal
+
+    return recent.map((event) => ({
+      summary: event.summary || 'Untitled',
+      start: event.start?.dateTime || event.start?.date,
+      end: event.end?.dateTime || event.end?.date,
+      location: event.location,
+      attendee_count: event.attendees?.length || 0,
+      has_recurrence: Boolean(event.recurrence?.length || event.recurringEventId),
+    }));
+  }
+
+  async generateRealtimeInsights(events: CalendarEvent[]): Promise<string[]> {
+    try {
+      if (!events.length) {
+        return [
+          'Calendar is quiet right now — add a few events so I can learn more.',
+        ];
+      }
+
+      const miniClient = CalendarService.getMiniClient();
+      const prompt = await CalendarService.getInsightPrompt();
+
+      const payload = {
+        now_iso: new Date().toISOString(),
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        event_sample: this.summarizeForInsights(events),
+      };
+
+      const response = await miniClient.chat.completions.create({
+        model: process.env.OPENAI_INSIGHT_MODEL || 'gpt-4o-mini',
+        temperature: 0.35,
+        max_tokens: 200,
+        messages: [
+          { role: 'system', content: prompt },
+          { role: 'user', content: JSON.stringify(payload) },
+        ],
+      });
+
+      const content = response.choices[0]?.message?.content?.trim();
+      if (!content) {
+        return [];
+      }
+
+      const jsonMatch = content.match(/\[[\s\S]*\]/);
+      const raw = jsonMatch ? jsonMatch[0] : content;
+      const parsed = JSON.parse(raw);
+
+      if (Array.isArray(parsed)) {
+        return parsed.slice(0, 5).map((item) => String(item));
+      }
+
+      return [];
+    } catch (error) {
+      console.error('Realtime insight generation failed:', error);
+      return [];
+    }
   }
 
   async fetchCalendarEvents(monthsBack: number = 3): Promise<CalendarEvent[]> {
@@ -32,7 +148,13 @@ export class CalendarService {
       );
 
       if (!response.ok) {
-        throw new Error(`Calendar API error: ${response.status}`);
+        if (response.status === 401) {
+          throw new Error('Calendar access token expired. Please re-authenticate with Google.');
+        } else if (response.status === 403) {
+          throw new Error('Calendar access denied. Please check your permissions.');
+        } else {
+          throw new Error(`Calendar API error: ${response.status}`);
+        }
       }
 
       const data = await response.json();
@@ -190,5 +312,285 @@ export class CalendarService {
       console.error('Error creating calendar event:', error);
       throw error;
     }
+  }
+
+  // New method to fetch 14 days of past and future data
+  async fetchCalendarTrends(): Promise<CalendarTrends> {
+    try {
+      const now = new Date();
+      const pastDate = new Date(now.getTime() - (14 * 24 * 60 * 60 * 1000)); // 14 days ago
+      const futureDate = new Date(now.getTime() + (14 * 24 * 60 * 60 * 1000)); // 14 days from now
+
+      const params = new URLSearchParams({
+        timeMin: pastDate.toISOString(),
+        timeMax: futureDate.toISOString(),
+        singleEvents: 'true',
+        orderBy: 'startTime',
+        maxResults: '2500',
+      });
+
+      const response = await fetch(
+        `https://www.googleapis.com/calendar/v3/calendars/primary/events?${params}`,
+        {
+          headers: {
+            Authorization: `Bearer ${this.accessToken}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          throw new Error('Calendar access token expired. Please re-authenticate with Google.');
+        } else if (response.status === 403) {
+          throw new Error('Calendar access denied. Please check your permissions.');
+        } else {
+          throw new Error(`Calendar API error: ${response.status}`);
+        }
+      }
+
+      const data = await response.json();
+      const allEvents = data.items || [];
+      
+      // Separate past and future events
+      const pastEvents = allEvents.filter((event: CalendarEvent) => {
+        const eventDate = event.start.dateTime ? new Date(event.start.dateTime) : new Date(event.start.date!);
+        return eventDate < now;
+      });
+
+      const upcomingEvents = allEvents.filter((event: CalendarEvent) => {
+        const eventDate = event.start.dateTime ? new Date(event.start.dateTime) : new Date(event.start.date!);
+        return eventDate >= now;
+      });
+
+      // Analyze patterns
+      const pastPatterns = this.analyzePastPatterns(pastEvents);
+      const upcomingPatterns = this.analyzeUpcomingPatterns(upcomingEvents);
+      const trends = this.analyzeTrends(pastEvents, upcomingEvents);
+
+      return {
+        pastEvents,
+        pastPatterns,
+        upcomingEvents,
+        upcomingPatterns,
+        trends,
+      };
+    } catch (error) {
+      console.error('Error fetching calendar trends:', error);
+      throw error;
+    }
+  }
+
+  private analyzePastPatterns(pastEvents: CalendarEvent[]) {
+    const eventTypes = pastEvents.map(event => this.categorizeEvent(event).type);
+    const eventTypeCounts = eventTypes.reduce((acc, type) => {
+      acc[type] = (acc[type] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+
+    // Most frequent event types
+    const mostFrequentEventTypes = Object.entries(eventTypeCounts)
+      .sort(([,a], [,b]) => b - a)
+      .slice(0, 5)
+      .map(([type]) => type);
+
+    // Average events per day
+    const averageEventsPerDay = pastEvents.length / 14;
+
+    // Busiest days of the week
+    const dayCounts = pastEvents.reduce((acc, event) => {
+      const eventDate = event.start.dateTime ? new Date(event.start.dateTime) : new Date(event.start.date!);
+      const dayName = eventDate.toLocaleDateString('en-US', { weekday: 'long' });
+      acc[dayName] = (acc[dayName] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+
+    const busiestDays = Object.entries(dayCounts)
+      .sort(([,a], [,b]) => b - a)
+      .slice(0, 3)
+      .map(([day]) => day);
+
+    // Common meeting times
+    const timeCounts = pastEvents.reduce((acc, event) => {
+      if (event.start.dateTime) {
+        const hour = new Date(event.start.dateTime).getHours();
+        const timeSlot = `${hour.toString().padStart(2, '0')}:00`;
+        acc[timeSlot] = (acc[timeSlot] || 0) + 1;
+      }
+      return acc;
+    }, {} as Record<string, number>);
+
+    const commonMeetingTimes = Object.entries(timeCounts)
+      .sort(([,a], [,b]) => b - a)
+      .slice(0, 5)
+      .map(([time]) => time);
+
+    // Find recurring events
+    const recurringEvents = pastEvents
+      .filter(event => event.recurrence && event.recurrence.length > 0)
+      .map(event => ({
+        title: event.summary || 'Untitled Event',
+        frequency: this.determineRecurrenceFrequency(event.recurrence![0]),
+        lastOccurrence: event.start.dateTime || event.start.date!,
+      }));
+
+    return {
+      mostFrequentEventTypes,
+      averageEventsPerDay: Math.round(averageEventsPerDay * 10) / 10,
+      busiestDays,
+      commonMeetingTimes,
+      recurringEvents,
+    };
+  }
+
+  private analyzeUpcomingPatterns(upcomingEvents: CalendarEvent[]) {
+    const eventTypes = upcomingEvents.map(event => this.categorizeEvent(event).type);
+    const scheduledEventTypes = [...new Set(eventTypes)];
+
+    // Find upcoming deadlines (events with keywords like 'deadline', 'due', 'submit')
+    const deadlineKeywords = ['deadline', 'due', 'submit', 'deliver', 'present', 'review'];
+    const upcomingDeadlines = upcomingEvents.filter(event => {
+      const text = `${event.summary} ${event.description}`.toLowerCase();
+      return deadlineKeywords.some(keyword => text.includes(keyword));
+    });
+
+    // Calculate free time slots (simplified - assumes 9 AM to 6 PM work hours)
+    const freeTimeSlots = this.calculateFreeTimeSlots(upcomingEvents);
+
+    // Identify busy periods
+    const busyPeriods = this.identifyBusyPeriods(upcomingEvents);
+
+    return {
+      scheduledEventTypes,
+      upcomingDeadlines,
+      freeTimeSlots,
+      busyPeriods,
+    };
+  }
+
+  private analyzeTrends(pastEvents: CalendarEvent[], upcomingEvents: CalendarEvent[]) {
+    const pastEventCount = pastEvents.length;
+    const upcomingEventCount = upcomingEvents.length;
+    
+    // Event frequency trend
+    let eventFrequencyTrend: 'increasing' | 'decreasing' | 'stable' = 'stable';
+    if (upcomingEventCount > pastEventCount * 1.2) {
+      eventFrequencyTrend = 'increasing';
+    } else if (upcomingEventCount < pastEventCount * 0.8) {
+      eventFrequencyTrend = 'decreasing';
+    }
+
+    // Work-life balance score (simplified calculation)
+    const workEvents = [...pastEvents, ...upcomingEvents].filter(event => 
+      this.categorizeEvent(event).type === 'work'
+    ).length;
+    const totalEvents = pastEvents.length + upcomingEvents.length;
+    const workLifeBalanceScore = totalEvents > 0 ? Math.max(1, Math.min(10, 10 - (workEvents / totalEvents * 10))) : 5;
+
+    // Meeting density
+    const meetingEvents = [...pastEvents, ...upcomingEvents].filter(event => 
+      event.summary?.toLowerCase().includes('meeting') || 
+      event.summary?.toLowerCase().includes('call')
+    ).length;
+    const meetingDensityTrend = meetingEvents > totalEvents * 0.6 ? 'high' : 
+                               meetingEvents > totalEvents * 0.3 ? 'medium' : 'low';
+
+    // Productivity windows (times with fewer meetings)
+    const productivityWindows = this.findProductivityWindows([...pastEvents, ...upcomingEvents]);
+
+    // Social activity level
+    const socialEvents = [...pastEvents, ...upcomingEvents].filter(event => 
+      this.categorizeEvent(event).type === 'social'
+    ).length;
+    const socialActivityLevel = socialEvents > totalEvents * 0.2 ? 'high' : 
+                               socialEvents > totalEvents * 0.1 ? 'medium' : 'low';
+
+    return {
+      eventFrequencyTrend,
+      workLifeBalanceScore: Math.round(workLifeBalanceScore),
+      meetingDensityTrend,
+      productivityWindows,
+      socialActivityLevel,
+    };
+  }
+
+  private determineRecurrenceFrequency(recurrenceRule: string): 'daily' | 'weekly' | 'monthly' {
+    if (recurrenceRule.includes('DAILY')) return 'daily';
+    if (recurrenceRule.includes('WEEKLY')) return 'weekly';
+    if (recurrenceRule.includes('MONTHLY')) return 'monthly';
+    return 'weekly'; // default
+  }
+
+  private calculateFreeTimeSlots(upcomingEvents: CalendarEvent[]) {
+    // Simplified calculation - assumes 9 AM to 6 PM work hours
+    const freeTimeSlots: { date: string; availableHours: string[] }[] = [];
+    
+    for (let i = 0; i < 14; i++) {
+      const date = new Date();
+      date.setDate(date.getDate() + i);
+      const dateStr = date.toISOString().split('T')[0];
+      
+      const dayEvents = upcomingEvents.filter(event => {
+        const eventDate = event.start.dateTime ? new Date(event.start.dateTime) : new Date(event.start.date!);
+        return eventDate.toISOString().split('T')[0] === dateStr;
+      });
+
+      // Simple availability calculation
+      const availableHours = ['09:00-11:00', '11:00-13:00', '14:00-16:00', '16:00-18:00'];
+      freeTimeSlots.push({
+        date: dateStr,
+        availableHours: dayEvents.length < 3 ? availableHours : availableHours.slice(0, 2),
+      });
+    }
+
+    return freeTimeSlots;
+  }
+
+  private identifyBusyPeriods(upcomingEvents: CalendarEvent[]) {
+    const busyPeriods: { date: string; eventCount: number; description: string }[] = [];
+    
+    for (let i = 0; i < 14; i++) {
+      const date = new Date();
+      date.setDate(date.getDate() + i);
+      const dateStr = date.toISOString().split('T')[0];
+      
+      const dayEvents = upcomingEvents.filter(event => {
+        const eventDate = event.start.dateTime ? new Date(event.start.dateTime) : new Date(event.start.date!);
+        return eventDate.toISOString().split('T')[0] === dateStr;
+      });
+
+      if (dayEvents.length >= 4) {
+        busyPeriods.push({
+          date: dateStr,
+          eventCount: dayEvents.length,
+          description: `${dayEvents.length} events scheduled`,
+        });
+      }
+    }
+
+    return busyPeriods;
+  }
+
+  private findProductivityWindows(allEvents: CalendarEvent[]) {
+    // Find hours with fewer meetings (9 AM to 6 PM)
+    const hourCounts = Array(10).fill(0); // 9 AM to 6 PM = 10 hours
+    
+    allEvents.forEach(event => {
+      if (event.start.dateTime) {
+        const hour = new Date(event.start.dateTime).getHours();
+        if (hour >= 9 && hour < 19) {
+          hourCounts[hour - 9]++;
+        }
+      }
+    });
+
+    // Find hours with least meetings
+    const productivityWindows = hourCounts
+      .map((count, index) => ({ hour: index + 9, count }))
+      .sort((a, b) => a.count - b.count)
+      .slice(0, 3)
+      .map(({ hour }) => `${hour.toString().padStart(2, '0')}:00`);
+
+    return productivityWindows;
   }
 }

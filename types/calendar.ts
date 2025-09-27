@@ -1,5 +1,6 @@
 export interface CalendarEvent {
   id: string;
+  status?: string;
   summary: string;
   description?: string;
   start: {
@@ -27,7 +28,9 @@ export interface CalendarEvent {
   recurrence?: string[];
   transparency?: string;
   visibility?: string;
-  status?: string;
+  hangoutLink?: string;
+  htmlLink?: string;
+  recurringEventId?: string;
 }
 
 export interface CalendarData {
