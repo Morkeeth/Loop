@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import NumberFlow from '@number-flow/react';
+import { SuggestPanel } from '@/components/SuggestPanel';
 
 type StepStatus = 'pending' | 'active' | 'complete' | 'error';
 
@@ -53,7 +54,7 @@ function AnimatedText({
   
   return <div className={className}>{text}</div>;
 }
-type PipelineStepId = 'calendar' | 'persona' | 'recommendations' | 'digest' | 'audio' | 'event';
+type PipelineStepId = 'calendar' | 'persona' | 'digest' | 'audio' | 'agent' | 'event' | 'suggest';
 
 interface PipelineStep {
   id: PipelineStepId;
@@ -75,24 +76,29 @@ const PIPELINE_TEMPLATE: Array<Omit<PipelineStep, 'status' | 'error'>> = [
     description: 'Summarising your rhythms, rituals, and working style with GPT-4.1',
   },
   {
-    id: 'recommendations',
-    title: 'Find Events',
-    description: 'Finding truly exceptional events with GPT-5 (2-4 total)',
-  },
-  {
     id: 'digest',
     title: 'Write Weekly Digest',
     description: 'Weaving your recent storyline with GPT-5',
   },
   {
     id: 'audio',
-    title: 'Record Audio Digest',
-    description: "Generating Marcel's voice with ElevenLabs",
+    title: 'Generate Audio',
+    description: "Creating Marcel's voice with ElevenLabs",
+  },
+  {
+    id: 'agent',
+    title: 'Create AI Agent',
+    description: 'Creating Marcel AI assistant with Beyond Presence',
   },
   {
     id: 'event',
     title: 'Schedule Digest Session',
-    description: 'Dropping everything into next Sunday with the audio link ready',
+    description: 'Dropping everything into next Sunday with audio and agent links ready',
+  },
+  {
+    id: 'suggest',
+    title: 'Suggest Events',
+    description: 'Generating personalized event suggestions for the next 4 weeks',
   },
 ];
 
@@ -111,13 +117,6 @@ const STEP_DESCRIPTIONS: Record<PipelineStepId, string[]> = {
     'Building your unique profile',
     'Generated with GPT-4o',
   ],
-  recommendations: [
-    'Finding events that match your interests',
-    'Searching for local activities and meetups',
-    'Analyzing your free time slots',
-    'Generating personalized suggestions',
-    'Powered by GPT-5 with web search',
-  ],
   digest: [
     'Weaving your recent storyline with GPT-5',
     'Connecting the dots in your calendar',
@@ -130,13 +129,27 @@ const STEP_DESCRIPTIONS: Record<PipelineStepId, string[]> = {
     'Converting text to speech',
     'Adding French accent warmth',
     'Optimizing audio quality',
-    'Recorded with ElevenLabs v3',
+    'Generated with ElevenLabs v3',
+  ],
+  agent: [
+    'Creating Marcel AI assistant with Beyond Presence',
+    'Configuring personal assistant capabilities',
+    'Setting up conversational AI with persona data',
+    'Generating unique agent URL',
+    'Ready for interactive conversations',
+  ],
+  suggest: [
+    'Analyzing your calendar patterns and interests',
+    'Finding free time slots in the next 4 weeks',
+    'Generating diverse event suggestions',
+    'Mixing public events, social activities, and personal activities',
+    'Generated with GPT-5',
   ],
   event: [
-    'Dropping everything into next Sunday with the audio link ready',
+    'Dropping everything into next Sunday with audio and agent links ready',
     'Calculating next Sunday at 3 PM',
     'Formatting the digest for calendar',
-    'Adding the audio link to description',
+    'Adding audio and agent links to description',
     'Scheduled via Google Calendar API',
   ],
 };
@@ -169,7 +182,7 @@ interface AudioGenerationResult {
   digestId: string;
 }
 
-function DashboardContent() {
+function Dashboard() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -181,9 +194,10 @@ function DashboardContent() {
   const [steps, setSteps] = useState<PipelineStep[]>(() => createInitialSteps());
   const [calendarPayload, setCalendarPayload] = useState<CalendarPayload | null>(null);
   const [persona, setPersona] = useState<any | null>(null);
-  const [recommendations, setRecommendations] = useState<any | null>(null);
   const [digestResult, setDigestResult] = useState<DigestResult | null>(null);
   const [audioDataUrl, setAudioDataUrl] = useState<string | null>(null);
+  const [agentData, setAgentData] = useState<{agentId: string, agentUrl: string} | null>(null);
+  const [suggestions, setSuggestions] = useState<any[]>([]);
   const [calendarEvent, setCalendarEvent] = useState<any | null>(null);
 
   const [isRunning, setIsRunning] = useState(false);
@@ -193,9 +207,10 @@ function DashboardContent() {
   const [activeStepDescriptions, setActiveStepDescriptions] = useState<Record<PipelineStepId, number>>({
     calendar: 0,
     persona: 0,
-    recommendations: 0,
     digest: 0,
     audio: 0,
+    agent: 0,
+    suggest: 0,
     event: 0,
   });
 
@@ -283,69 +298,6 @@ function DashboardContent() {
     );
   }, []);
 
-  const renderRecommendationsContent = useCallback((recommendations: any) => {
-    if (!recommendations?.recommendations?.length) {
-      return null;
-    }
-
-    return (
-      <div className="mt-4 p-4 bg-gray-50 rounded-lg w-full">
-        <h4 className="font-semibold mb-3">Exceptional Event Recommendations</h4>
-        <p className="text-xs text-gray-600 mb-3">Only the most interesting and unique events that match your interests</p>
-        <div className="space-y-3">
-          {recommendations.recommendations.map((week: any, weekIndex: number) => (
-            <div key={weekIndex} className="border rounded-lg p-3 bg-white">
-              <h5 className="font-medium text-sm text-gray-700 mb-2">
-                Week of {new Date(week.week_start_date).toLocaleDateString()}
-              </h5>
-              <div className="space-y-2">
-                {week.recommendations.map((rec: any, recIndex: number) => (
-                  <div key={recIndex} className="flex justify-between items-start p-2 bg-gray-50 rounded">
-                    <div className="flex-1">
-                      <h6 className="font-medium text-sm">{rec.title}</h6>
-                      <p className="text-xs text-gray-600 mt-1">{rec.description}</p>
-                      <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
-                        <span>📅 {rec.date} at {rec.start_time}</span>
-                        <span>📍 {rec.location}</span>
-                        <span>💰 {rec.cost}</span>
-                        <span className={`px-2 py-1 rounded text-xs ${
-                          rec.category === 'professional' ? 'bg-blue-100 text-blue-800' :
-                          rec.category === 'social' ? 'bg-green-100 text-green-800' :
-                          rec.category === 'cultural' ? 'bg-purple-100 text-purple-800' :
-                          rec.category === 'fitness' ? 'bg-orange-100 text-orange-800' :
-                          'bg-gray-100 text-gray-800'
-                        }`}>
-                          {rec.category}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-xs text-gray-500 mb-1">
-                        Relevance: {Math.round(rec.relevance_score * 100)}%
-                      </div>
-                      <a 
-                        href={rec.source_url} 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        className="text-xs text-blue-600 hover:text-blue-800"
-                      >
-                        View Event →
-                      </a>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-        <div className="mt-3 text-xs text-gray-500">
-          <p>Total recommendations: {recommendations.metadata?.total_recommendations || 0}</p>
-          <p>Confidence: {Math.round((recommendations.metadata?.confidence_score || 0) * 100)}%</p>
-        </div>
-      </div>
-    );
-  }, []);
-
   const renderStepContent = useCallback((stepId: PipelineStepId) => {
     switch (stepId) {
       case 'calendar':
@@ -356,9 +308,6 @@ function DashboardContent() {
       
       case 'persona':
         return renderSafeContent(persona, 'Generated Persona');
-      
-      case 'recommendations':
-        return renderRecommendationsContent(recommendations);
       
       case 'digest':
         return renderSafeContent(digestResult, 'Weekly Digest');
@@ -375,13 +324,83 @@ function DashboardContent() {
           </div>
         ) : null;
       
+      case 'agent':
+        console.log('Rendering agent case, agentData:', agentData);
+        return agentData ? (
+          <div className="mt-4 p-4 bg-gray-50 rounded-lg w-full">
+            <h4 className="font-semibold mb-2">Marcel AI Assistant</h4>
+            <div className="mb-4">
+              <iframe
+                src={agentData.agentUrl}
+                style={{ 
+                  width: '100%', 
+                  height: '400px', 
+                  border: 'none', 
+                  borderRadius: '8px',
+                  backgroundColor: '#f9fafb'
+                }}
+                allow="camera; microphone; fullscreen"
+                allowFullScreen
+                title="Marcel AI Assistant"
+              />
+            </div>
+            <p className="text-xs text-gray-600 mb-2">Interactive AI assistant powered by Beyond Presence</p>
+            <div className="mt-2">
+              <a 
+                href={agentData.agentUrl} 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="text-blue-600 hover:text-blue-800 text-sm underline"
+              >
+                Open Marcel in new tab
+              </a>
+            </div>
+          </div>
+        ) : (
+          <div className="mt-4 p-4 bg-gray-50 rounded-lg w-full">
+            <p className="text-gray-500">Agent not available yet...</p>
+          </div>
+        );
+      
+      case 'suggest':
+        return suggestions.length > 0 ? (
+          <div className="mt-4 p-4 bg-gray-50 rounded-lg w-full">
+            <h4 className="font-semibold mb-2">Suggested Events ({suggestions.length})</h4>
+            <div className="space-y-2 max-h-64 overflow-y-auto">
+              {suggestions.slice(0, 5).map((suggestion, index) => (
+                <div key={index} className="p-3 border rounded bg-white">
+                  <div className="flex items-center gap-2 mb-1">
+                    <h5 className="font-medium text-sm">{suggestion.title}</h5>
+                    <span className="px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded">
+                      {suggestion.category}
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-600 mb-1">
+                    {new Date(suggestion.startTime).toLocaleDateString()} at{' '}
+                    {new Date(suggestion.startTime).toLocaleTimeString([], {
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })}
+                  </p>
+                  <p className="text-xs text-gray-500">{suggestion.reason}</p>
+                </div>
+              ))}
+              {suggestions.length > 5 && (
+                <p className="text-xs text-gray-500 text-center">
+                  ... and {suggestions.length - 5} more suggestions
+                </p>
+              )}
+            </div>
+          </div>
+        ) : null;
+      
       case 'event':
         return renderSafeContent(calendarEvent, 'Calendar Event Created');
       
       default:
         return null;
     }
-  }, [calendarPayload, persona, recommendations, digestResult, audioDataUrl, calendarEvent, renderSafeContent, renderRecommendationsContent]);
+  }, [calendarPayload, persona, digestResult, audioDataUrl, calendarEvent, renderSafeContent]);
 
   useEffect(() => {
     const token = searchParams.get('access_token');
@@ -410,12 +429,12 @@ function DashboardContent() {
           localStorage.setItem('userName', userNameParam);
         }
 
-        const cleanUrl = new URL(window.location.href);
-        cleanUrl.searchParams.delete('access_token');
-        cleanUrl.searchParams.delete('refresh_token');
-        cleanUrl.searchParams.delete('user_email');
-        cleanUrl.searchParams.delete('user_name');
-        window.history.replaceState({}, '', cleanUrl.toString());
+      const cleanUrl = new URL(window.location.href);
+      cleanUrl.searchParams.delete('access_token');
+      cleanUrl.searchParams.delete('refresh_token');
+      cleanUrl.searchParams.delete('user_email');
+      cleanUrl.searchParams.delete('user_name');
+      window.history.replaceState({}, '', cleanUrl.toString());
       }
 
       return;
@@ -450,11 +469,16 @@ function DashboardContent() {
 
     // Start description animation for this step
     const descriptions = STEP_DESCRIPTIONS[stepId];
+    if (!descriptions || descriptions.length === 0) {
+      console.warn(`No descriptions found for step: ${stepId}`);
+      return await action();
+    }
+    
     let descriptionIndex = 0;
     
     const descriptionInterval = setInterval(() => {
       setActiveStepDescriptions(prev => ({
-        ...prev,
+        ...(prev || {}),
         [stepId]: descriptionIndex
       }));
       descriptionIndex = (descriptionIndex + 1) % descriptions.length;
@@ -509,7 +533,7 @@ function DashboardContent() {
     }
   }, []);
 
-  const buildEventDescription = useCallback((content: string, audioPageUrl: string) => {
+  const buildEventDescription = useCallback((content: string, audioPageUrl: string, agentUrl?: string, agentId?: string) => {
     const absoluteAudioUrl =
       typeof window !== 'undefined'
         ? audioPageUrl.startsWith('http')
@@ -517,12 +541,18 @@ function DashboardContent() {
           : `${window.location.origin}${audioPageUrl}`
         : audioPageUrl;
 
-    const withAudioLink = content.includes('🎧 Listen To Your Digest:')
+    let withAudioLink = content.includes('🎧 Listen To Your Digest:')
       ? content.replace(
           /🎧 Listen To Your Digest: (\/digest\/[^\s]+)/g,
           `🎧 Listen To Your Digest: ${absoluteAudioUrl}`
         )
       : `🎧 Listen To Your Digest: ${absoluteAudioUrl}\n\n${content}`;
+
+    // Add agent link if available (with fallback to build from agentId)
+    const finalAgentUrl = agentUrl || (agentId ? `https://bey.chat/${agentId}` : null);
+    if (finalAgentUrl) {
+      withAudioLink = `🤖 Chat with Marcel: ${finalAgentUrl}\n\n${withAudioLink}`;
+    }
 
     return withAudioLink.replace(/https?:\/\/[^\s]+/g, (url) => {
       try {
@@ -549,25 +579,24 @@ function DashboardContent() {
     setSteps(createInitialSteps());
     setCalendarPayload(null);
     setPersona(null);
-    setRecommendations(null);
     setDigestResult(null);
     setAudioDataUrl(null);
     setCalendarEvent(null);
 
     try {
       const calendar = await executeStep('calendar', async () => {
-        const response = await fetch(
-          `/api/calendar?accessToken=${encodeURIComponent(accessToken)}&monthsBack=6&insights=true`
-        );
+      const response = await fetch(
+        `/api/calendar?accessToken=${encodeURIComponent(accessToken)}&monthsBack=6&insights=true`
+      );
 
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
 
-          if (response.status === 401 || response.status === 403) {
+        if (response.status === 401 || response.status === 403) {
             if (typeof window !== 'undefined') {
-              localStorage.removeItem('accessToken');
-              localStorage.removeItem('userEmail');
-              localStorage.removeItem('userName');
+          localStorage.removeItem('accessToken');
+          localStorage.removeItem('userEmail');
+          localStorage.removeItem('userName');
             }
 
             router.push('/');
@@ -587,25 +616,25 @@ function DashboardContent() {
         }
 
         return await retryWithBackoff(async () => {
-          const response = await fetch('/api/persona', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              calendarData: {
-                now_iso: new Date().toISOString(),
-                default_timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-                calendars: [{ id: 'primary', summary: 'Primary Calendar' }],
+      const response = await fetch('/api/persona', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          calendarData: {
+            now_iso: new Date().toISOString(),
+            default_timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+            calendars: [{ id: 'primary', summary: 'Primary Calendar' }],
                 events: calendar.minified,
-              },
-            }),
-          });
+          },
+        }),
+      });
 
-          if (!response.ok) {
-            const errorData = await response.json().catch(() => ({}));
-            throw new Error(errorData.error || errorData.details || 'Failed to generate persona');
-          }
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || errorData.details || 'Failed to generate persona');
+      }
 
           return await response.json();
         });
@@ -613,36 +642,8 @@ function DashboardContent() {
 
       setPersona(personaData);
 
-      // Run recommendations and digest in parallel
-      const [recommendationsData, digest] = await Promise.all([
-        executeStep('recommendations', async () => {
-          const response = await fetch('/api/recommendations', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              persona: personaData,
-              calendarEvents: calendar.events,
-              userLocation: {
-                city: personaData.profile?.home_base?.city || 'San Francisco',
-                country: personaData.profile?.home_base?.country || 'US',
-                timezone: personaData.profile?.primary_timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
-              },
-              currentDate: new Date().toISOString(),
-            }),
-          });
-
-          if (!response.ok) {
-            const errorData = await response.json().catch(() => ({}));
-            throw new Error(errorData.error || errorData.message || 'Failed to generate recommendations');
-          }
-
-          const recommendationsPayload = await response.json();
-          setRecommendations(recommendationsPayload);
-          return recommendationsPayload;
-        }),
-        executeStep('digest', async () => {
+          // Generate digest first
+      const digest = await executeStep('digest', async () => {
         const response = await fetch('/api/digest', {
           method: 'POST',
           headers: {
@@ -664,122 +665,168 @@ function DashboardContent() {
         const digestPayload: DigestResult = await response.json();
         setDigestResult(digestPayload);
         return digestPayload;
+      });
+
+      // Start audio and agent in parallel after digest is complete
+      const [audioResult, agentResult] = await Promise.all([
+        executeStep('audio', async () => {
+          const response = await fetch('/api/digest/audio/generate', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              digestId: digest.digestId,
+              content: digest.content,
+            }),
+          });
+
+          if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.error || 'Failed to generate audio');
+          }
+
+          const audioPayload: AudioGenerationResult = await response.json();
+          setAudioDataUrl(audioPayload.audioUrl);
+          return audioPayload;
         }),
+        
+        executeStep('agent', async () => {
+          const response = await fetch('/api/digest/agent/create', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+              digestId: digest.digestId,
+              digestContent: digest.content,
+              persona: personaData,
+              calendarData: calendar.minified,
+        }),
+      });
+
+      if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            console.warn('Agent creation failed:', errorData.error);
+            // Don't throw error for agent failure, just return null
+            return null;
+          }
+
+          const agentPayload = await response.json();
+          console.log('Agent created successfully:', agentPayload);
+          setAgentData({ agentId: agentPayload.agentId, agentUrl: agentPayload.agentUrl });
+          console.log('Agent data set:', { agentId: agentPayload.agentId, agentUrl: agentPayload.agentUrl });
+          return agentPayload;
+        })
       ]);
 
-      await executeStep('audio', async () => {
-        const response = await fetch('/api/digest/audio/generate', {
+      // Schedule digest session immediately after audio and agent are done
+      await executeStep('event', async () => {
+        const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      const now = new Date();
+      const daysUntilSunday = (7 - now.getDay()) % 7;
+      const nextSunday = new Date(now);
+      nextSunday.setDate(now.getDate() + (daysUntilSunday === 0 ? 7 : daysUntilSunday));
+      nextSunday.setHours(15, 0, 0, 0);
+
+        // Use immediately returned agentResult to avoid state timing issues
+        const description = buildEventDescription(
+          digest.content,
+          digest.audioUrl,
+          (agentResult && 'agentUrl' in (agentResult as any)) ? (agentResult as any).agentUrl : agentData?.agentUrl,
+          (agentResult && 'agentId' in (agentResult as any)) ? (agentResult as any).agentId : agentData?.agentId
+        );
+
+      const eventData = {
+        summary: 'Circling Back',
+        location: 'by Loop',
+          description,
+        start: {
+          dateTime: nextSunday.toISOString(),
+            timeZone: timezone,
+        },
+        end: {
+            dateTime: new Date(nextSunday.getTime() + 60 * 60 * 1000).toISOString(),
+            timeZone: timezone,
+        },
+      };
+
+      const response = await fetch('/api/calendar', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          accessToken,
+          eventData,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to create calendar event');
+      }
+
+      const result = await response.json();
+        setCalendarEvent(result.event);
+        return result.event;
+      });
+
+      // Generate suggestions independently after digest session is scheduled
+      await executeStep('suggest', async () => {
+        const response = await fetch('/api/suggest/generate', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            digestId: digest.digestId,
-            content: digest.content,
+            persona: personaData,
+            calendarData: calendar.minified,
           }),
         });
 
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}));
-          throw new Error(errorData.error || 'Failed to generate audio');
+          console.warn('Suggest generation failed:', errorData.error);
+          // Don't throw error for suggest failure, just return empty array
+          return { suggestions: [] };
         }
 
-        const audioPayload: AudioGenerationResult = await response.json();
-        setAudioDataUrl(audioPayload.audioUrl);
-        return audioPayload;
-      });
+        const suggestPayload = await response.json();
+        const suggestionsWithIds = suggestPayload.suggestions?.map((suggestion: any, index: number) => ({
+          ...suggestion,
+          id: `suggestion_${Date.now()}_${index}`,
+          selected: true, // Default to selected
+        })) || [];
+        
+        setSuggestions(suggestionsWithIds);
 
-      await executeStep('event', async () => {
-        const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-        const now = new Date();
-        const daysUntilSunday = (7 - now.getDay()) % 7;
-        const nextSunday = new Date(now);
-        nextSunday.setDate(now.getDate() + (daysUntilSunday === 0 ? 7 : daysUntilSunday));
-        nextSunday.setHours(15, 0, 0, 0);
+        // Automatically add all suggestions to calendar
+        if (suggestionsWithIds.length > 0 && accessToken) {
+          try {
+            console.log('Automatically adding', suggestionsWithIds.length, 'suggested events to calendar...');
+            const addResponse = await fetch('/api/suggest/write', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                suggestions: suggestionsWithIds,
+                accessToken,
+              }),
+            });
 
-        const description = buildEventDescription(digest.content, digest.audioUrl);
-
-        // Create digest event
-        const digestEventData = {
-          summary: 'Circling Back',
-          location: 'by Loop',
-          description,
-          start: {
-            dateTime: nextSunday.toISOString(),
-            timeZone: timezone,
-          },
-          end: {
-            dateTime: new Date(nextSunday.getTime() + 60 * 60 * 1000).toISOString(),
-            timeZone: timezone,
-          },
-        };
-
-        const digestResponse = await fetch('/api/calendar', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            accessToken,
-            eventData: digestEventData,
-          }),
-        });
-
-        if (!digestResponse.ok) {
-          const errorData = await digestResponse.json().catch(() => ({}));
-          throw new Error(errorData.error || 'Failed to create digest calendar event');
-        }
-
-        const digestResult = await digestResponse.json();
-        setCalendarEvent(digestResult.event);
-
-        // Create recommendation events if available
-        if (recommendationsData?.recommendations?.length > 0) {
-          const recommendationEvents = [];
-          
-          for (const week of recommendationsData.recommendations) {
-            for (const rec of week.recommendations) {
-              const eventData = {
-                summary: rec.title,
-                description: `${rec.description}\n\nLocation: ${rec.location}\nCost: ${rec.cost}\nRegistration Required: ${rec.registration_required ? 'Yes' : 'No'}\nSource: ${rec.source_url}`,
-                location: rec.location,
-                start: {
-                  dateTime: `${rec.date}T${rec.start_time}:00`,
-                  timeZone: timezone,
-                },
-                end: {
-                  dateTime: `${rec.date}T${rec.end_time}:00`,
-                  timeZone: timezone,
-                },
-              };
-
-              try {
-                const recResponse = await fetch('/api/calendar', {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                  },
-                  body: JSON.stringify({
-                    accessToken,
-                    eventData,
-                  }),
-                });
-
-                if (recResponse.ok) {
-                  const recResult = await recResponse.json();
-                  recommendationEvents.push(recResult.event);
-                }
-              } catch (error) {
-                console.warn('Failed to create recommendation event:', error);
-                // Continue with other events even if one fails
-              }
+            if (addResponse.ok) {
+              const addData = await addResponse.json();
+              console.log(`Successfully added ${addData.createdEvents} events to calendar automatically`);
+            } else {
+              const errorData = await addResponse.json().catch(() => ({}));
+              console.warn('Failed to auto-add events:', errorData.error);
             }
+          } catch (error) {
+            console.warn('Error auto-adding events:', error);
           }
-
-          console.log(`Created ${recommendationEvents.length} recommendation events`);
         }
 
-        return digestResult.event;
+        return suggestPayload;
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Something went wrong while orchestrating the flow';
@@ -1098,8 +1145,8 @@ function DashboardContent() {
               <path d="M7.61523 7.28711C9.63867 7.28711 11.2656 5.64648 11.2656 3.63672C11.2656 1.62695 9.63867 0 7.61523 0C5.60547 0 3.97852 1.62695 3.97852 3.63672C3.97852 5.64648 5.60547 7.28711 7.61523 7.28711ZM7.61523 5.30469C6.69922 5.30469 5.94727 4.55273 5.94727 3.63672C5.94727 2.7207 6.69922 1.96875 7.61523 1.96875C8.54492 1.96875 9.29688 2.7207 9.29688 3.63672C9.29688 4.55273 8.54492 5.30469 7.61523 5.30469ZM15.5996 7.28711C17.6094 7.28711 19.2363 5.64648 19.2363 3.63672C19.2363 1.62695 17.6094 0 15.5996 0C13.5898 0 11.9492 1.62695 11.9492 3.63672C11.9492 5.64648 13.5898 7.28711 15.5996 7.28711ZM15.5996 5.30469C14.6836 5.30469 13.9316 4.55273 13.9316 3.63672C13.9316 2.7207 14.6836 1.96875 15.5996 1.96875C16.5156 1.96875 17.2676 2.7207 17.2676 3.63672C17.2676 4.55273 16.5156 5.30469 15.5996 5.30469ZM3.65039 14.4102C5.66016 14.4102 7.28711 12.7695 7.28711 10.7598C7.28711 8.75 5.66016 7.10938 3.65039 7.10938C1.62695 7.10938 0 8.75 0 10.7598C0 12.7695 1.62695 14.4102 3.65039 14.4102ZM3.65039 12.4277C2.7207 12.4277 1.96875 11.6758 1.96875 10.7598C1.96875 9.84375 2.7207 9.0918 3.65039 9.0918C4.56641 9.0918 5.31836 9.84375 5.31836 10.7598C5.31836 11.6758 4.56641 12.4277 3.65039 12.4277ZM19.5781 14.4102C21.5879 14.4102 23.2148 12.7695 23.2148 10.7598C23.2148 8.75 21.5879 7.10938 19.5781 7.10938C17.5684 7.10938 15.9277 8.75 15.9277 10.7598C15.9277 12.7695 17.5684 14.4102 19.5781 14.4102ZM19.5781 12.4277C18.6484 12.4277 17.8965 11.6758 17.8965 10.7598C17.8965 9.84375 18.6484 9.0918 19.5781 9.0918C20.4941 9.0918 21.2461 9.84375 21.2461 10.7598C21.2461 11.6758 20.4941 12.4277 19.5781 12.4277ZM7.61523 21.5332C9.63867 21.5332 11.2656 19.9062 11.2656 17.8965C11.2656 15.8867 9.63867 14.2461 7.61523 14.2461C5.60547 14.2461 3.97852 15.8867 3.97852 17.8965C3.97852 19.9062 5.60547 21.5332 7.61523 21.5332ZM7.61523 19.5645C6.69922 19.5645 5.94727 18.8125 5.94727 17.8965C5.94727 16.9805 6.69922 16.2285 7.61523 16.2285C8.54492 16.2285 9.29688 16.9805 9.29688 17.8965C9.29688 18.8125 8.54492 19.5645 7.61523 19.5645ZM15.5996 21.5332C17.6094 21.5332 19.2363 19.9062 19.2363 17.8965C19.2363 15.8867 17.6094 14.2461 15.5996 14.2461C13.5898 14.2461 11.9492 15.8867 11.9492 17.8965C11.9492 19.9062 13.5898 21.5332 15.5996 21.5332ZM15.5996 19.5645C14.6836 19.5645 13.9316 18.8125 13.9316 17.8965C13.9316 16.9805 14.6836 16.2285 15.5996 16.2285C16.5156 16.2285 17.2676 16.9805 17.2676 17.8965C17.2676 18.8125 16.5156 19.5645 15.5996 19.5645Z"/>
             </svg>
             <span className="text-xl font-bold text-black">Loop</span>
+            </div>
           </div>
-        </div>
       </header>
 
       <style jsx>{`
@@ -1154,13 +1201,13 @@ function DashboardContent() {
             <div className="mb-6 space-y-2">
               <h1 className="text-2xl font-semibold text-black">{headline}</h1>
               {supportingLine && <p className="text-sm text-gray-600">{supportingLine}</p>}
-            </div>
+        </div>
           )}
 
           {pipelineError ? (
             <div className="mb-6 rounded-lg border border-red-500 bg-red-50 px-4 py-3 text-sm text-red-600">
               {pipelineError}
-            </div>
+      </div>
           ) : null}
 
           <ul className="space-y-3">
@@ -1182,10 +1229,19 @@ function DashboardContent() {
               const isExpanded = expandedSteps.has(step.id);
               const hasContent = (step.id === 'calendar' && calendarPayload) ||
                                (step.id === 'persona' && persona) ||
-                               (step.id === 'recommendations' && recommendations) ||
                                (step.id === 'digest' && digestResult) ||
                                (step.id === 'audio' && audioDataUrl) ||
+                               (step.id === 'agent' && agentData) ||
+                               (step.id === 'suggest' && suggestions.length > 0) ||
                                (step.id === 'event' && calendarEvent);
+              
+              if (step.id === 'agent') {
+                console.log('Agent step hasContent check:', { 
+                  stepId: step.id, 
+                  agentData, 
+                  hasContent 
+                });
+              }
 
               return (
                 <li key={step.id}>
@@ -1212,7 +1268,7 @@ function DashboardContent() {
                         />
                         {step.error ? (
                           <p className="text-sm font-medium text-red-600">{step.error}</p>
-                        ) : null}
+        ) : null}
                       </div>
                       <StepStatusIcon status={step.status} />
                     </div>
@@ -1228,15 +1284,64 @@ function DashboardContent() {
             })}
           </ul>
 
+          {/* Suggest Panel */}
+          {pipelineComplete && suggestions.length > 0 && (
+            <div className="mt-8">
+              <SuggestPanel
+                persona={persona}
+                calendarPayload={calendarPayload}
+                accessToken={accessToken}
+                onGenerate={() => {}} // Already generated in pipeline
+                onAddToCalendar={() => {}} // Already added automatically
+                onUndo={async () => {
+                  // Optimistic UI: show removing state immediately
+                  setActiveStepDescriptions((prev) => ({ ...prev, suggest: 4 }));
+                  try {
+                    // Set temporary loading flag by toggling local copy
+                    const undoBtn = document.activeElement as HTMLButtonElement | null;
+                    if (undoBtn) undoBtn.disabled = true;
+
+                    const response = await fetch('/api/suggest/undo', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ accessToken }),
+                    });
+
+                    if (!response.ok) {
+                      const errorData = await response.json().catch(() => ({}));
+                      throw new Error(errorData.error || 'Failed to undo events');
+                    }
+
+                    const data = await response.json();
+                    // Immediate visual feedback
+                    setSuggestions([]);
+                    alert(`Successfully removed ${data.deletedEvents} events and cleaned up Autoplan calendar!`);
+                  } catch (err) {
+                    console.error('Undo failed:', err);
+                    alert(err instanceof Error ? err.message : 'Failed to undo events');
+                  } finally {
+                    setActiveStepDescriptions((prev) => ({ ...prev, suggest: 0 }));
+                  }
+                }}
+                isGenerating={false}
+                isAddingToCalendar={false}
+                isUndoing={false}
+                suggestions={suggestions}
+                onToggleSuggestion={() => {}} // No longer needed since events are auto-added
+                autoAdded={true}
+              />
+            </div>
+          )}
+
           <div className="mt-6">
             {hasFailure ? (
-              <button
+            <button
                 type="button"
                 onClick={runPipeline}
                 className="minimal-button"
               >
                 Retry Pipeline
-              </button>
+            </button>
             ) : pipelineComplete ? (
               <a
                 href="https://calendar.google.com"
@@ -1253,7 +1358,7 @@ function DashboardContent() {
                 Open Calendar
               </a>
             ) : null}
-          </div>
+            </div>
         </div>
       </main>
     </div>
@@ -1283,10 +1388,10 @@ function StepStatusIcon({ status }: { status: StepStatus }) {
   }
 }
 
-export default function Dashboard() {
+export default function DashboardPage() {
   return (
     <Suspense fallback={<div>Loading...</div>}>
-      <DashboardContent />
+      <Dashboard />
     </Suspense>
   );
 }

@@ -49,6 +49,14 @@ CORE RULES:
 - Events must be specific, actionable, and personally relevant
 - Duration: 30min-2hours typically
 
+OVERLAP PREVENTION (CRITICAL):
+- CAREFULLY review the "EXISTING EVENTS SCHEDULE" section in the calendar data
+- NEVER suggest events that overlap with existing calendar events
+- Find ONLY FREE time slots between existing events
+- If a time slot has ANY existing event, DO NOT suggest anything for that time
+- Consider buffer time - avoid scheduling immediately before/after existing events
+- Double-check all suggested times against the existing schedule
+
 ACTIVITY TYPES TO INCLUDE:
 1. PUBLIC EVENTS (use web search): Meetups, workshops, exhibitions, concerts, festivals
 2. SOCIAL ACTIVITIES: "Coffee with Sarah", "Football with friends", "Study group with classmates"
@@ -84,8 +92,9 @@ CRITICAL DATE REQUIREMENTS:
 - Use proper ISO 8601 format with timezone UTC
 - Ensure startTime is before endTime
 - Duration should be 30min-2hours typically
+- CRITICAL: Verify NO overlaps with existing calendar events
 
-Generate 6-10 diverse suggestions mixing public events, social activities, and personal activities.`;
+Generate 6-10 diverse suggestions mixing public events, social activities, and personal activities ONLY in free time slots.`;
 
     // Create a more efficient calendar summary for analysis
     const calendarSummary = createCalendarSummary(calendarData);
@@ -102,8 +111,9 @@ SCHEDULING CONSTRAINTS:
 - Avoid meal times: 7-9am breakfast, 12-2pm lunch, 6-8pm dinner
 - CRITICAL: Check ALL existing events in CALENDAR PATTERNS section for conflicts
 - NEVER suggest events that overlap with existing calendar events
-- Find FREE time slots between existing events
+- Find ONLY FREE time slots between existing events
 - ALL SELECTED CALENDARS are included in the analysis above
+- DOUBLE-CHECK: Every suggested time must be completely free of existing events
 
 TASK:
 1. Analyze their calendar patterns, interests, and social connections
@@ -117,6 +127,7 @@ TASK:
 5. Write compelling reasons that make them want to participate
 6. CRITICAL: Generate DIFFERENT dates for each suggestion - spread them across the 4-week window
 7. Use realistic future dates within the time window specified above
+8. FINAL CHECK: Verify NO suggested event overlaps with ANY existing calendar event
 
 Generate personalized activity suggestions mixing public events, social activities, and personal activities ONLY in free time slots.`;
 
@@ -139,7 +150,16 @@ Generate personalized activity suggestions mixing public events, social activiti
     }
 
     const parsed = JSON.parse(content);
-    return NextResponse.json(parsed);
+    
+    // Post-processing: Remove overlapping events
+    const filteredSuggestions = removeOverlappingEvents(parsed.suggestions || [], calendarData);
+    
+    return NextResponse.json({
+      suggestions: filteredSuggestions,
+      originalCount: parsed.suggestions?.length || 0,
+      filteredCount: filteredSuggestions.length,
+      overlapsRemoved: (parsed.suggestions?.length || 0) - filteredSuggestions.length
+    });
 
   } catch (error) {
     // Check for quota issues and provide fallback
@@ -302,4 +322,49 @@ function createCalendarSummary(calendarData: any[]): string {
   summary += "\nIMPORTANT: Only suggest events in FREE time slots between the above events!";
   
   return summary;
+}
+
+function removeOverlappingEvents(suggestions: SuggestedEvent[], calendarData: any[]): SuggestedEvent[] {
+  if (!suggestions || suggestions.length === 0) return suggestions;
+  
+  console.log(`Checking ${suggestions.length} suggestions for overlaps with ${calendarData.length} existing events...`);
+  
+  const filteredSuggestions: SuggestedEvent[] = [];
+  
+  for (const suggestion of suggestions) {
+    const suggestionStart = new Date(suggestion.startTime);
+    const suggestionEnd = new Date(suggestion.endTime);
+    
+    // Check if this suggestion overlaps with any existing calendar event
+    let hasOverlap = false;
+    
+    for (const existingEvent of calendarData) {
+      const existingStart = new Date(existingEvent.st || existingEvent.startTime);
+      const existingEnd = new Date(existingEvent.et || existingEvent.endTime);
+      
+      // Skip if we don't have valid times for the existing event
+      if (isNaN(existingStart.getTime()) || isNaN(existingEnd.getTime())) {
+        continue;
+      }
+      
+      // Check for overlap: events overlap if one starts before the other ends
+      const overlaps = suggestionStart < existingEnd && suggestionEnd > existingStart;
+      
+      if (overlaps) {
+        console.log(`Removing suggestion "${suggestion.title}" due to overlap with "${existingEvent.s || existingEvent.summary}"`);
+        console.log(`  Suggestion: ${suggestionStart.toISOString()} - ${suggestionEnd.toISOString()}`);
+        console.log(`  Existing: ${existingStart.toISOString()} - ${existingEnd.toISOString()}`);
+        hasOverlap = true;
+        break;
+      }
+    }
+    
+    if (!hasOverlap) {
+      filteredSuggestions.push(suggestion);
+    }
+  }
+  
+  console.log(`Filtered ${suggestions.length} suggestions down to ${filteredSuggestions.length} (removed ${suggestions.length - filteredSuggestions.length} overlaps)`);
+  
+  return filteredSuggestions;
 }
