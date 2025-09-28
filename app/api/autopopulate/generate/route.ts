@@ -17,48 +17,19 @@ export async function POST(request: NextRequest) {
 
     if (!persona || !calendarData) {
       return NextResponse.json(
-        { error: 'Persona and calendar data required' },
+        { error: 'Persona and calendar data are required' },
         { status: 400 }
       );
     }
 
-    // Check if OpenAI API key is available
     if (!process.env.OPENAI_API_KEY) {
-      console.error('OpenAI API key not found');
       return NextResponse.json(
         { error: 'OpenAI API key not configured' },
         { status: 500 }
       );
     }
 
-    // Estimate token usage and reduce context if needed
-    const estimatedTokens = estimateTokenUsage(persona, calendarData);
-    console.log(`Estimated token usage: ${estimatedTokens}`);
-
-    let processedCalendarData = calendarData;
-    let contextReductionAttempts = 0;
-    const maxAttempts = 3;
-
-    // GPT-5 has much higher token limits (128k+), using more of its capacity
-    const maxTokens = 120000; // Increased limit for GPT-5's larger context window
-    
-    // If token usage is too high, reduce context
-    while (estimatedTokens > maxTokens && contextReductionAttempts < maxAttempts) {
-      console.log(`Token usage too high (${estimatedTokens}), reducing context...`);
-      processedCalendarData = reduceCalendarContext(calendarData, contextReductionAttempts + 1);
-      const newEstimatedTokens = estimateTokenUsage(persona, processedCalendarData);
-      console.log(`Reduced context: ${estimatedTokens} -> ${newEstimatedTokens} tokens`);
-      
-      if (newEstimatedTokens <= maxTokens) {
-        break;
-      }
-      
-      contextReductionAttempts++;
-    }
-
-    if (contextReductionAttempts >= maxAttempts) {
-      console.warn('Max context reduction attempts reached, proceeding with reduced data');
-    }
+    console.log('Generating event suggestions...');
 
     // Calculate date constraints
     const now = new Date();
@@ -117,7 +88,7 @@ CRITICAL DATE REQUIREMENTS:
 Generate 6-10 diverse suggestions mixing public events, social activities, and personal activities.`;
 
     // Create a more efficient calendar summary for analysis
-    const calendarSummary = createCalendarSummary(processedCalendarData);
+    const calendarSummary = createCalendarSummary(calendarData);
     
     const userPrompt = `USER CONTEXT:
 ${JSON.stringify(persona, null, 2)}
@@ -171,6 +142,17 @@ Generate personalized activity suggestions mixing public events, social activiti
     return NextResponse.json(parsed);
 
   } catch (error) {
+    // Check for quota issues and provide fallback
+    if (error instanceof Error && error.message.includes('quota')) {
+      console.warn('OpenAI quota exceeded, returning empty suggestions...');
+      return NextResponse.json({
+        success: true,
+        suggestions: [],
+        message: 'OpenAI quota exceeded - no suggestions generated',
+        fallback: true
+      });
+    }
+
     console.error('Auto-populate generation error:', error);
     return NextResponse.json(
       { 
@@ -180,32 +162,6 @@ Generate personalized activity suggestions mixing public events, social activiti
       { status: 500 }
     );
   }
-}
-
-function estimateTokenUsage(persona: any, calendarData: any[]): number {
-  const personaText = JSON.stringify(persona);
-  const calendarText = JSON.stringify(calendarData);
-  const systemPrompt = `You are a calendar suggestion assistant...`; // Approximate length
-  
-  // Rough estimation: 1 token ≈ 4 characters
-  const totalChars = personaText.length + calendarText.length + systemPrompt.length;
-  return Math.ceil(totalChars / 4);
-}
-
-function reduceCalendarContext(calendarData: any[], reductionLevel: number): any[] {
-  // Sort by recency (most recent first)
-  const sorted = [...calendarData].sort((a, b) => {
-    const aTime = new Date(a.st || a.startTime || 0).getTime();
-    const bTime = new Date(b.st || b.startTime || 0).getTime();
-    return bTime - aTime;
-  });
-
-  // Reduce based on level
-  const reductionFactors = [0.8, 0.6, 0.4]; // Keep 80%, 60%, 40%
-  const factor = reductionFactors[Math.min(reductionLevel - 1, reductionFactors.length - 1)];
-  const keepCount = Math.ceil(sorted.length * factor);
-  
-  return sorted.slice(0, keepCount);
 }
 
 function createCalendarSummary(calendarData: any[]): string {
@@ -283,23 +239,18 @@ function createCalendarSummary(calendarData: any[]): string {
     if (events.length > 3) summary += `  • ... and ${events.length - 3} more\n`;
     summary += '\n';
   });
-  
+
   // Time patterns
   summary += "TIME PREFERENCES:\n";
-  Object.entries(timePatterns)
-    .sort(([,a], [,b]) => b - a)
-    .forEach(([timeSlot, count]) => {
-      summary += `- ${timeSlot.replace('_', ' ')}: ${count} events\n`;
-    });
-  summary += '\n';
+  Object.entries(timePatterns).forEach(([time, count]) => {
+    summary += `- ${time}: ${count} events\n`;
+  });
   
   // Day patterns
-  summary += "DAY PREFERENCES:\n";
-  Object.entries(dayPatterns)
-    .sort(([,a], [,b]) => b - a)
-    .forEach(([day, count]) => {
-      summary += `- ${day}: ${count} events\n`;
-    });
+  summary += "\nDAY PREFERENCES:\n";
+  Object.entries(dayPatterns).forEach(([day, count]) => {
+    summary += `- ${day}: ${count} events\n`;
+  });
   
   // Meal time conflicts
   summary += "\nMEAL TIME CONFLICTS (avoid scheduling during these times):\n";

@@ -74,6 +74,33 @@ export async function POST(request: NextRequest) {
         max_tokens: 2000,
       });
     } catch (openaiError: any) {
+      if (openaiError.code === 'insufficient_quota') {
+        console.log('OpenAI quota exceeded, using fallback persona...');
+        // Return a fallback persona when quota is exceeded
+        return NextResponse.json({
+          persona: {
+            name: "Default User",
+            working_style: "Productive professional",
+            communication_preference: "Direct and efficient",
+            meeting_patterns: "Regular business hours",
+            energy_levels: "High energy in mornings",
+            focus_areas: "Work, personal development, health",
+            social_preferences: "Balanced social and solo time",
+            learning_style: "Hands-on and practical",
+            stress_indicators: "Over-scheduling, lack of breaks",
+            optimal_conditions: "Quiet environment, clear goals",
+            time_management: "Structured and organized",
+            collaboration_style: "Team-oriented",
+            decision_making: "Data-driven and analytical",
+            feedback_preference: "Constructive and specific",
+            work_life_balance: "Clear boundaries between work and personal time"
+          },
+          isFallback: true,
+          error: "OpenAI quota exceeded. Using default persona.",
+          originalError: openaiError.message
+        });
+      }
+      
       if (openaiError.code === 'context_length_exceeded') {
         console.log('Context length exceeded with GPT-4o, trying with GPT-4o-mini...');
         // Try with GPT-4o-mini as fallback

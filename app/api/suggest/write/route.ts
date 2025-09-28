@@ -14,13 +14,7 @@ export async function POST(request: NextRequest) {
   try {
     const { suggestions, accessToken } = await request.json();
 
-    console.log('Autopopulate write request received:', {
-      suggestionsCount: suggestions?.length || 0,
-      hasAccessToken: !!accessToken
-    });
-
     if (!suggestions || !Array.isArray(suggestions)) {
-      console.error('Invalid suggestions data:', suggestions);
       return NextResponse.json(
         { error: 'Suggestions array required' },
         { status: 400 }
@@ -28,7 +22,6 @@ export async function POST(request: NextRequest) {
     }
 
     if (!accessToken) {
-      console.error('No access token provided');
       return NextResponse.json(
         { error: 'Access token required' },
         { status: 400 }
@@ -37,10 +30,8 @@ export async function POST(request: NextRequest) {
 
     // Filter only selected suggestions
     const selectedSuggestions = suggestions.filter((s: SuggestedEvent) => s.selected);
-    console.log(`Found ${selectedSuggestions.length} selected suggestions out of ${suggestions.length} total`);
 
     if (selectedSuggestions.length === 0) {
-      console.error('No suggestions selected:', suggestions.map(s => ({ title: s.title, selected: s.selected })));
       return NextResponse.json(
         { error: 'No suggestions selected' },
         { status: 400 }
@@ -144,12 +135,9 @@ async function getOrCreateAutoplanCalendar(accessToken: string): Promise<string>
 }
 
 async function createCalendarEvent(accessToken: string, calendarId: string, suggestion: SuggestedEvent) {
-  // Create a clean description without the loop_autopopulate tag
-  const cleanDescription = suggestion.reason || '';
-  
   const eventData = {
     summary: suggestion.title,
-    description: cleanDescription,
+    description: `${suggestion.reason}`,
     start: {
       dateTime: suggestion.startTime,
       timeZone: 'UTC',
@@ -158,19 +146,17 @@ async function createCalendarEvent(accessToken: string, calendarId: string, sugg
       dateTime: suggestion.endTime,
       timeZone: 'UTC',
     },
+    // Keep a reliable identifier for cleanup without polluting the description
+    extendedProperties: {
+      private: {
+        loopAutopopulate: 'v1'
+      }
+    },
     source: {
       title: 'Loop Labs Auto-Populate',
       url: 'https://loop-labs.app',
     },
   };
-
-  console.log('Creating calendar event:', {
-    title: suggestion.title,
-    startTime: suggestion.startTime,
-    endTime: suggestion.endTime,
-    calendarId: calendarId,
-    eventData: eventData
-  });
 
   const response = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${calendarId}/events`, {
     method: 'POST',
@@ -192,12 +178,5 @@ async function createCalendarEvent(accessToken: string, calendarId: string, sugg
     throw new Error(`Failed to create event: ${response.status} ${response.statusText} - ${errorData}`);
   }
 
-  const result = await response.json();
-  console.log('Successfully created calendar event:', {
-    title: suggestion.title,
-    eventId: result.id,
-    calendarId: calendarId
-  });
-
-  return result;
+  return await response.json();
 }
