@@ -527,4 +527,104 @@ Rules:
       throw error;
     }
   }
+
+  // Method to calculate free time slots for recommendations
+  calculateFreeTimeSlotsForRecommendations(
+    events: CalendarEvent[], 
+    persona: any, 
+    currentDate: string = new Date().toISOString()
+  ): Array<{
+    date: string;
+    start_time: string;
+    end_time: string;
+    duration_minutes: number;
+    weekday: string;
+  }> {
+    const now = new Date(currentDate);
+    const fourWeeksFromNow = new Date(now.getTime() + (28 * 24 * 60 * 60 * 1000));
+    
+    const freeSlots: Array<{
+      date: string;
+      start_time: string;
+      end_time: string;
+      duration_minutes: number;
+      weekday: string;
+    }> = [];
+    
+    const typicalStart = persona?.profile?.typical_day_start_local || '09:00';
+    const typicalEnd = persona?.profile?.typical_day_end_local || '18:00';
+    const quietHours = persona?.profile?.quiet_hours || '22:00-07:00';
+    
+    const [quietStart, quietEnd] = quietHours.split('-');
+    
+    for (let i = 0; i < 28; i++) {
+      const date = new Date(now.getTime() + (i * 24 * 60 * 60 * 1000));
+      const dateStr = date.toISOString().split('T')[0];
+      const weekday = date.toLocaleDateString('en-US', { weekday: 'long' });
+      
+      const dayEvents = events.filter(event => {
+        const eventDate = event.start.dateTime ? 
+          new Date(event.start.dateTime).toISOString().split('T')[0] :
+          event.start.date;
+        return eventDate === dateStr;
+      });
+      
+      dayEvents.sort((a, b) => {
+        const aTime = a.start.dateTime || a.start.date || '';
+        const bTime = b.start.dateTime || b.start.date || '';
+        return new Date(aTime).getTime() - new Date(bTime).getTime();
+      });
+      
+      const gaps = [];
+      let lastEndTime = typicalStart;
+      
+      for (const event of dayEvents) {
+        const eventStart = event.start.dateTime ? 
+          new Date(event.start.dateTime).toTimeString().slice(0, 5) :
+          '09:00';
+        
+        if (eventStart > lastEndTime) {
+          const duration = this.timeDiffInMinutes(lastEndTime, eventStart);
+          if (duration >= 60) {
+            gaps.push({
+              date: dateStr,
+              start_time: lastEndTime,
+              end_time: eventStart,
+              duration_minutes: duration,
+              weekday
+            });
+          }
+        }
+        
+        const eventEnd = event.end.dateTime ? 
+          new Date(event.end.dateTime).toTimeString().slice(0, 5) :
+          '17:00';
+        
+        lastEndTime = eventEnd;
+      }
+      
+      if (lastEndTime < quietStart) {
+        const duration = this.timeDiffInMinutes(lastEndTime, quietStart);
+        if (duration >= 60) {
+          gaps.push({
+            date: dateStr,
+            start_time: lastEndTime,
+            end_time: quietStart,
+            duration_minutes: duration,
+            weekday
+          });
+        }
+      }
+      
+      freeSlots.push(...gaps);
+    }
+    
+    return freeSlots;
+  }
+
+  private timeDiffInMinutes(start: string, end: string): number {
+    const startTime = new Date(`2000-01-01T${start}:00`);
+    const endTime = new Date(`2000-01-01T${end}:00`);
+    return (endTime.getTime() - startTime.getTime()) / (1000 * 60);
+  }
 }
