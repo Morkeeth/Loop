@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import NumberFlow from '@number-flow/react';
 
@@ -53,7 +53,7 @@ function AnimatedText({
   
   return <div className={className}>{text}</div>;
 }
-type PipelineStepId = 'calendar' | 'persona' | 'digest' | 'audio' | 'event';
+type PipelineStepId = 'calendar' | 'persona' | 'recommendations' | 'digest' | 'audio' | 'event';
 
 interface PipelineStep {
   id: PipelineStepId;
@@ -73,6 +73,11 @@ const PIPELINE_TEMPLATE: Array<Omit<PipelineStep, 'status' | 'error'>> = [
     id: 'persona',
     title: 'Create Persona',
     description: 'Summarising your rhythms, rituals, and working style with GPT-4.1',
+  },
+  {
+    id: 'recommendations',
+    title: 'Find Events',
+    description: 'Finding truly exceptional events with GPT-5 (2-4 total)',
   },
   {
     id: 'digest',
@@ -105,6 +110,13 @@ const STEP_DESCRIPTIONS: Record<PipelineStepId, string[]> = {
     'Understanding your meeting habits',
     'Building your unique profile',
     'Generated with GPT-4o',
+  ],
+  recommendations: [
+    'Finding events that match your interests',
+    'Searching for local activities and meetups',
+    'Analyzing your free time slots',
+    'Generating personalized suggestions',
+    'Powered by GPT-5 with web search',
   ],
   digest: [
     'Weaving your recent storyline with GPT-5',
@@ -157,7 +169,7 @@ interface AudioGenerationResult {
   digestId: string;
 }
 
-export default function Dashboard() {
+function DashboardContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -169,6 +181,7 @@ export default function Dashboard() {
   const [steps, setSteps] = useState<PipelineStep[]>(() => createInitialSteps());
   const [calendarPayload, setCalendarPayload] = useState<CalendarPayload | null>(null);
   const [persona, setPersona] = useState<any | null>(null);
+  const [recommendations, setRecommendations] = useState<any | null>(null);
   const [digestResult, setDigestResult] = useState<DigestResult | null>(null);
   const [audioDataUrl, setAudioDataUrl] = useState<string | null>(null);
   const [calendarEvent, setCalendarEvent] = useState<any | null>(null);
@@ -180,6 +193,7 @@ export default function Dashboard() {
   const [activeStepDescriptions, setActiveStepDescriptions] = useState<Record<PipelineStepId, number>>({
     calendar: 0,
     persona: 0,
+    recommendations: 0,
     digest: 0,
     audio: 0,
     event: 0,
@@ -269,6 +283,69 @@ export default function Dashboard() {
     );
   }, []);
 
+  const renderRecommendationsContent = useCallback((recommendations: any) => {
+    if (!recommendations?.recommendations?.length) {
+      return null;
+    }
+
+    return (
+      <div className="mt-4 p-4 bg-gray-50 rounded-lg w-full">
+        <h4 className="font-semibold mb-3">Exceptional Event Recommendations</h4>
+        <p className="text-xs text-gray-600 mb-3">Only the most interesting and unique events that match your interests</p>
+        <div className="space-y-3">
+          {recommendations.recommendations.map((week: any, weekIndex: number) => (
+            <div key={weekIndex} className="border rounded-lg p-3 bg-white">
+              <h5 className="font-medium text-sm text-gray-700 mb-2">
+                Week of {new Date(week.week_start_date).toLocaleDateString()}
+              </h5>
+              <div className="space-y-2">
+                {week.recommendations.map((rec: any, recIndex: number) => (
+                  <div key={recIndex} className="flex justify-between items-start p-2 bg-gray-50 rounded">
+                    <div className="flex-1">
+                      <h6 className="font-medium text-sm">{rec.title}</h6>
+                      <p className="text-xs text-gray-600 mt-1">{rec.description}</p>
+                      <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
+                        <span>📅 {rec.date} at {rec.start_time}</span>
+                        <span>📍 {rec.location}</span>
+                        <span>💰 {rec.cost}</span>
+                        <span className={`px-2 py-1 rounded text-xs ${
+                          rec.category === 'professional' ? 'bg-blue-100 text-blue-800' :
+                          rec.category === 'social' ? 'bg-green-100 text-green-800' :
+                          rec.category === 'cultural' ? 'bg-purple-100 text-purple-800' :
+                          rec.category === 'fitness' ? 'bg-orange-100 text-orange-800' :
+                          'bg-gray-100 text-gray-800'
+                        }`}>
+                          {rec.category}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-xs text-gray-500 mb-1">
+                        Relevance: {Math.round(rec.relevance_score * 100)}%
+                      </div>
+                      <a 
+                        href={rec.source_url} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="text-xs text-blue-600 hover:text-blue-800"
+                      >
+                        View Event →
+                      </a>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="mt-3 text-xs text-gray-500">
+          <p>Total recommendations: {recommendations.metadata?.total_recommendations || 0}</p>
+          <p>Confidence: {Math.round((recommendations.metadata?.confidence_score || 0) * 100)}%</p>
+        </div>
+      </div>
+    );
+  }, []);
+
   const renderStepContent = useCallback((stepId: PipelineStepId) => {
     switch (stepId) {
       case 'calendar':
@@ -279,6 +356,9 @@ export default function Dashboard() {
       
       case 'persona':
         return renderSafeContent(persona, 'Generated Persona');
+      
+      case 'recommendations':
+        return renderRecommendationsContent(recommendations);
       
       case 'digest':
         return renderSafeContent(digestResult, 'Weekly Digest');
@@ -301,7 +381,7 @@ export default function Dashboard() {
       default:
         return null;
     }
-  }, [calendarPayload, persona, digestResult, audioDataUrl, calendarEvent, renderSafeContent]);
+  }, [calendarPayload, persona, recommendations, digestResult, audioDataUrl, calendarEvent, renderSafeContent, renderRecommendationsContent]);
 
   useEffect(() => {
     const token = searchParams.get('access_token');
@@ -469,6 +549,7 @@ export default function Dashboard() {
     setSteps(createInitialSteps());
     setCalendarPayload(null);
     setPersona(null);
+    setRecommendations(null);
     setDigestResult(null);
     setAudioDataUrl(null);
     setCalendarEvent(null);
@@ -532,7 +613,36 @@ export default function Dashboard() {
 
       setPersona(personaData);
 
-      const digest = await executeStep('digest', async () => {
+      // Run recommendations and digest in parallel
+      const [recommendationsData, digest] = await Promise.all([
+        executeStep('recommendations', async () => {
+          const response = await fetch('/api/recommendations', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              persona: personaData,
+              calendarEvents: calendar.events,
+              userLocation: {
+                city: personaData.profile?.home_base?.city || 'San Francisco',
+                country: personaData.profile?.home_base?.country || 'US',
+                timezone: personaData.profile?.primary_timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
+              },
+              currentDate: new Date().toISOString(),
+            }),
+          });
+
+          if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.error || errorData.message || 'Failed to generate recommendations');
+          }
+
+          const recommendationsPayload = await response.json();
+          setRecommendations(recommendationsPayload);
+          return recommendationsPayload;
+        }),
+        executeStep('digest', async () => {
         const response = await fetch('/api/digest', {
           method: 'POST',
           headers: {
@@ -554,7 +664,8 @@ export default function Dashboard() {
         const digestPayload: DigestResult = await response.json();
         setDigestResult(digestPayload);
         return digestPayload;
-      });
+        }),
+      ]);
 
       await executeStep('audio', async () => {
         const response = await fetch('/api/digest/audio/generate', {
@@ -588,7 +699,8 @@ export default function Dashboard() {
 
         const description = buildEventDescription(digest.content, digest.audioUrl);
 
-        const eventData = {
+        // Create digest event
+        const digestEventData = {
           summary: 'Circling Back',
           location: 'by Loop',
           description,
@@ -602,25 +714,72 @@ export default function Dashboard() {
           },
         };
 
-        const response = await fetch('/api/calendar', {
+        const digestResponse = await fetch('/api/calendar', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
             accessToken,
-            eventData,
+            eventData: digestEventData,
           }),
         });
 
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-          throw new Error(errorData.error || 'Failed to create calendar event');
+        if (!digestResponse.ok) {
+          const errorData = await digestResponse.json().catch(() => ({}));
+          throw new Error(errorData.error || 'Failed to create digest calendar event');
         }
 
-        const result = await response.json();
-        setCalendarEvent(result.event);
-        return result.event;
+        const digestResult = await digestResponse.json();
+        setCalendarEvent(digestResult.event);
+
+        // Create recommendation events if available
+        if (recommendationsData?.recommendations?.length > 0) {
+          const recommendationEvents = [];
+          
+          for (const week of recommendationsData.recommendations) {
+            for (const rec of week.recommendations) {
+              const eventData = {
+                summary: rec.title,
+                description: `${rec.description}\n\nLocation: ${rec.location}\nCost: ${rec.cost}\nRegistration Required: ${rec.registration_required ? 'Yes' : 'No'}\nSource: ${rec.source_url}`,
+                location: rec.location,
+                start: {
+                  dateTime: `${rec.date}T${rec.start_time}:00`,
+                  timeZone: timezone,
+                },
+                end: {
+                  dateTime: `${rec.date}T${rec.end_time}:00`,
+                  timeZone: timezone,
+                },
+              };
+
+              try {
+                const recResponse = await fetch('/api/calendar', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({
+                    accessToken,
+                    eventData,
+                  }),
+                });
+
+                if (recResponse.ok) {
+                  const recResult = await recResponse.json();
+                  recommendationEvents.push(recResult.event);
+                }
+              } catch (error) {
+                console.warn('Failed to create recommendation event:', error);
+                // Continue with other events even if one fails
+              }
+            }
+          }
+
+          console.log(`Created ${recommendationEvents.length} recommendation events`);
+        }
+
+        return digestResult.event;
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Something went wrong while orchestrating the flow';
@@ -1023,6 +1182,7 @@ export default function Dashboard() {
               const isExpanded = expandedSteps.has(step.id);
               const hasContent = (step.id === 'calendar' && calendarPayload) ||
                                (step.id === 'persona' && persona) ||
+                               (step.id === 'recommendations' && recommendations) ||
                                (step.id === 'digest' && digestResult) ||
                                (step.id === 'audio' && audioDataUrl) ||
                                (step.id === 'event' && calendarEvent);
@@ -1121,4 +1281,12 @@ function StepStatusIcon({ status }: { status: StepStatus }) {
     default:
       return <span className="h-6 w-6 rounded-full border border-dashed border-gray-300"></span>;
   }
+}
+
+export default function Dashboard() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <DashboardContent />
+    </Suspense>
+  );
 }

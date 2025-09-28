@@ -1,4 +1,4 @@
-import { Persona } from './persona';
+import { PersonaProfile } from './persona';
 import { CalendarEvent } from './calendar';
 
 export interface CalendarTrends {
@@ -44,7 +44,7 @@ export interface CalendarTrends {
 
 export interface DigestContext {
   // Core persona information
-  persona: Persona;
+  persona: PersonaProfile;
   
   // Calendar context
   calendarTrends: CalendarTrends;

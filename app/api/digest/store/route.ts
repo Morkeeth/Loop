@@ -3,7 +3,7 @@ import { storeDigest } from '@/lib/digest-storage';
 
 export async function POST(request: NextRequest) {
   try {
-    const { digestId, content } = await request.json();
+    const { digestId, content, audioUrl } = await request.json();
     
     if (!digestId || !content) {
       return NextResponse.json(
@@ -12,7 +12,7 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    storeDigest(digestId, content);
+    storeDigest(digestId, content, audioUrl);
     
     return NextResponse.json({
       success: true,

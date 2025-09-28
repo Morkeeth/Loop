@@ -1,5 +1,6 @@
 import OpenAI from 'openai';
-import { PersonaProfile, PersonaInsights, LoadingComment, ProcessedEvent } from '@/types/persona';
+import { PersonaProfile, PersonaInsights, LoadingComment } from '@/types/persona';
+import { ProcessedEvent } from '@/types/calendar';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
