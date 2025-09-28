@@ -149,7 +149,11 @@ RULES:
     const minifiedEvents = minifyEvents(historicalEvents.slice(0, 20)); // More events since minified
     
     const payload = {
+<<<<<<< HEAD
       persona_summary: (persona as any).persona_summary_120 || 'Professional based in Lisbon',
+=======
+      persona_summary: persona.persona_summary_120 || 'Professional based in Lisbon',
+>>>>>>> feat-recommendations
       interests: persona.interests || {},
       location: persona.location || {},
       historical_events: minifiedEvents, // Minified format

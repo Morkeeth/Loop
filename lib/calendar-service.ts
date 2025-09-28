@@ -3,6 +3,7 @@ import path from 'path';
 import OpenAI from 'openai';
 
 import { CalendarEvent, ProcessedEvent, EventCategory } from '@/types/calendar';
+import { CalendarTrends } from '@/types/digest-context';
 
 export class CalendarService {
   private accessToken: string;
@@ -102,24 +103,15 @@ Rules:
         }
       };
 
-      let response;
-      try {
-        response = await miniClient.chat.completions.create({
-          model: process.env.OPENAI_INSIGHT_MODEL || 'gpt-4o-mini',
-          temperature: 0.35,
-          max_tokens: 200,
-          messages: [
-            { role: 'system', content: prompt },
-            { role: 'user', content: JSON.stringify(payload) },
-          ],
-        });
-      } catch (error: any) {
-        if (error.status === 429) {
-          console.error('OpenAI API quota exceeded for insights generation');
-          return ['OpenAI API quota exceeded - insights temporarily unavailable'];
-        }
-        throw error;
-      }
+      const response = await miniClient.chat.completions.create({
+        model: process.env.OPENAI_INSIGHT_MODEL || 'gpt-4o-mini',
+        temperature: 0.35,
+        max_tokens: 200,
+        messages: [
+          { role: 'system', content: prompt },
+          { role: 'user', content: JSON.stringify(payload) },
+        ],
+      });
 
       const content = response.choices[0]?.message?.content?.trim();
       if (!content) {
@@ -185,8 +177,7 @@ Rules:
     };
   }
 
-  // Method to get all calendars the user has access to
-  async getAllCalendars(): Promise<any[]> {
+  async fetchCalendarList(): Promise<any[]> {
     try {
       const response = await fetch(
         'https://www.googleapis.com/calendar/v3/users/me/calendarList',
@@ -204,7 +195,7 @@ Rules:
         } else if (response.status === 403) {
           throw new Error('Calendar access denied. Please check your permissions.');
         } else {
-          throw new Error(`Calendar list API error: ${response.status}`);
+          throw new Error(`Calendar API error: ${response.status}`);
         }
       }
 
@@ -217,11 +208,6 @@ Rules:
   }
 
   async fetchCalendarEvents(monthsBack: number = 3): Promise<CalendarEvent[]> {
-    const result = await this.fetchCalendarEventsWithMetadata(monthsBack);
-    return result.events;
-  }
-
-  async fetchCalendarEventsWithMetadata(monthsBack: number = 3): Promise<{events: CalendarEvent[], actualMonthsUsed: number}> {
     try {
       const now = new Date();
       const startDate = new Date(now.getFullYear(), now.getMonth() - monthsBack, 1);
@@ -235,148 +221,53 @@ Rules:
         maxResults: '2500', // Google Calendar API limit
       });
 
-      // First, get all calendars the user has access to
-      const calendars = await this.getAllCalendars();
+      // Fetch calendar list to get all accessible calendars
+      const calendarList = await this.fetchCalendarList();
+      const allEvents: CalendarEvent[] = [];
 
-      // Filter to only calendars with selected: true
-      const selectedCalendars = calendars.filter((calendar: any) => 
-        calendar.selected === true
-      );
-
-      console.log(`Found ${calendars.length} total calendars, ${selectedCalendars.length} selected calendars`);
-      selectedCalendars.forEach((calendar, index) => {
-        console.log(`  ${index + 1}. ${calendar.summary} (${calendar.id}) - Access: ${calendar.accessRole}`);
-      });
-
-      // Try to fetch events with dynamic context reduction if needed
-      const result = await this.fetchEventsWithContextReduction(selectedCalendars, params, monthsBack);
-      return result;
-    } catch (error) {
-      console.error('Error fetching calendar events:', error);
-      throw error;
-    }
-  }
-
-  private async fetchEventsWithContextReduction(
-    calendars: any[], 
-    params: URLSearchParams, 
-    originalMonthsBack: number,
-    maxRetries: number = 3
-  ): Promise<{events: CalendarEvent[], actualMonthsUsed: number}> {
-    let monthsBack = originalMonthsBack;
-    let attempt = 0;
-
-    while (attempt < maxRetries) {
-      try {
-        console.log(`Attempt ${attempt + 1}: Fetching events from ${calendars.length} calendars for ${monthsBack} months back`);
-
-        // Update time range for this attempt
-        const now = new Date();
-        const startDate = new Date(now.getFullYear(), now.getMonth() - monthsBack, 1);
-        const endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-
-        params.set('timeMin', startDate.toISOString());
-        params.set('timeMax', endDate.toISOString());
-
-        // Fetch events from all selected calendars
-        const allEvents: CalendarEvent[] = [];
-        const fetchPromises = calendars.map(async (calendar: any) => {
-          try {
-            const calendarId = encodeURIComponent(calendar.id);
-            const response = await fetch(
-              `https://www.googleapis.com/calendar/v3/calendars/${calendarId}/events?${params}`,
-              {
-                headers: {
-                  Authorization: `Bearer ${this.accessToken}`,
-                  'Content-Type': 'application/json',
-                },
-              }
-            );
-
-            if (!response.ok) {
-              console.warn(`Failed to fetch events from calendar ${calendar.summary}: ${response.status}`);
-              return [];
+      // Fetch events from each calendar
+      for (const calendar of calendarList) {
+        try {
+          const response = await fetch(
+            `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendar.id)}/events?${params}`,
+            {
+              headers: {
+                Authorization: `Bearer ${this.accessToken}`,
+                'Content-Type': 'application/json',
+              },
             }
+          );
 
+          if (response.ok) {
             const data = await response.json();
             const events = data.items || [];
-            
-            // Add calendar info to each event
-            return events.map((event: CalendarEvent) => ({
+            // Add calendar metadata to each event
+            const eventsWithCalendar = events.map((event: CalendarEvent) => ({
               ...event,
               calendarId: calendar.id,
               calendarSummary: calendar.summary,
               calendarAccessRole: calendar.accessRole,
             }));
-          } catch (error) {
-            console.warn(`Error fetching events from calendar ${calendar.summary}:`, error);
-            return [];
+            allEvents.push(...eventsWithCalendar);
+          } else {
+            console.warn(`Failed to fetch events from calendar ${calendar.id}: ${response.status}`);
           }
-        });
-
-        const calendarEventsArrays = await Promise.all(fetchPromises);
-        
-        // Flatten all events into a single array
-        calendarEventsArrays.forEach(events => {
-          allEvents.push(...events);
-        });
-
-        console.log(`Fetched ${allEvents.length} total events from ${calendars.length} calendars`);
-
-        // Sort all events by start time
-        allEvents.sort((a, b) => {
-          const aStart = a.start?.dateTime || a.start?.date || '';
-          const bStart = b.start?.dateTime || b.start?.date || '';
-          return new Date(aStart).getTime() - new Date(bStart).getTime();
-        });
-
-        // Estimate token usage and reduce context if needed
-        const estimatedTokens = this.estimateTokenUsage(allEvents);
-        console.log(`Estimated token usage: ${estimatedTokens}`);
-
-        if (estimatedTokens > 25000) { // Leave some buffer below the 30k limit
-          console.log(`Token usage too high (${estimatedTokens}), reducing context...`);
-          monthsBack = Math.max(1, Math.floor(monthsBack * 0.7)); // Reduce by 30%
-          attempt++;
-          continue;
+        } catch (error) {
+          console.warn(`Error fetching events from calendar ${calendar.id}:`, error);
+          // Continue with other calendars even if one fails
         }
-
-        // If we get here, the context size is acceptable
-        return { events: allEvents, actualMonthsUsed: monthsBack };
-
-      } catch (error) {
-        console.error(`Attempt ${attempt + 1} failed:`, error);
-        attempt++;
-        monthsBack = Math.max(1, Math.floor(monthsBack * 0.7));
       }
+
+      // Sort all events by start time
+      return allEvents.sort((a, b) => {
+        const aStart = a.start?.dateTime || a.start?.date || '';
+        const bStart = b.start?.dateTime || b.start?.date || '';
+        return new Date(aStart).getTime() - new Date(bStart).getTime();
+      });
+    } catch (error) {
+      console.error('Error fetching calendar events:', error);
+      throw error;
     }
-
-    // If all attempts failed, return empty array
-    console.warn('All attempts to fetch calendar events failed, returning empty array');
-    return { events: [], actualMonthsUsed: originalMonthsBack };
-  }
-
-  private estimateTokenUsage(events: CalendarEvent[]): number {
-    // Rough estimation: 1 token ≈ 4 characters
-    let totalChars = 0;
-    
-    events.forEach(event => {
-      totalChars += (event.summary || '').length;
-      totalChars += (event.description || '').length;
-      totalChars += (event.location || '').length;
-      totalChars += (event.start?.dateTime || event.start?.date || '').length;
-      totalChars += (event.end?.dateTime || event.end?.date || '').length;
-      totalChars += (event.calendarSummary || '').length;
-      
-      if (event.attendees) {
-        event.attendees.forEach(attendee => {
-          totalChars += (attendee.email || '').length;
-          totalChars += (attendee.displayName || '').length;
-        });
-      }
-    });
-
-    return Math.ceil(totalChars / 4);
   }
 
   categorizeEvent(event: CalendarEvent): EventCategory {
@@ -528,25 +419,303 @@ Rules:
     }
   }
 
-  // Method to calculate free time slots for recommendations
-  // Filter events for digest timeframe (7 days back + 2 weeks forward)
-  filterEventsForDigest(
-    events: CalendarEvent[],
-    currentDate: string = new Date().toISOString()
-  ): CalendarEvent[] {
-    const now = new Date(currentDate);
-    const sevenDaysAgo = new Date(now.getTime() - (7 * 24 * 60 * 60 * 1000));
-    const twoWeeksFromNow = new Date(now.getTime() + (14 * 24 * 60 * 60 * 1000));
-    
-    return events.filter(event => {
-      const eventDate = event.start.dateTime ? 
-        new Date(event.start.dateTime) : 
-        new Date(event.start.date!);
+  // New method to fetch 14 days of past and future data
+  async fetchCalendarTrends(): Promise<CalendarTrends> {
+    try {
+      const now = new Date();
+      const pastDate = new Date(now.getTime() - (14 * 24 * 60 * 60 * 1000)); // 14 days ago
+      const futureDate = new Date(now.getTime() + (14 * 24 * 60 * 60 * 1000)); // 14 days from now
+
+      const params = new URLSearchParams({
+        timeMin: pastDate.toISOString(),
+        timeMax: futureDate.toISOString(),
+        singleEvents: 'true',
+        orderBy: 'startTime',
+        maxResults: '2500',
+      });
+
+      // Fetch calendar list to get all accessible calendars
+      const calendarList = await this.fetchCalendarList();
+      const allEvents: CalendarEvent[] = [];
+
+      // Fetch events from each calendar
+      for (const calendar of calendarList) {
+        try {
+          const response = await fetch(
+            `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendar.id)}/events?${params}`,
+            {
+              headers: {
+                Authorization: `Bearer ${this.accessToken}`,
+                'Content-Type': 'application/json',
+              },
+            }
+          );
+
+          if (response.ok) {
+            const data = await response.json();
+            const events = data.items || [];
+            // Add calendar metadata to each event
+            const eventsWithCalendar = events.map((event: CalendarEvent) => ({
+              ...event,
+              calendarId: calendar.id,
+              calendarSummary: calendar.summary,
+              calendarAccessRole: calendar.accessRole,
+            }));
+            allEvents.push(...eventsWithCalendar);
+          } else {
+            console.warn(`Failed to fetch events from calendar ${calendar.id}: ${response.status}`);
+          }
+        } catch (error) {
+          console.warn(`Error fetching events from calendar ${calendar.id}:`, error);
+          // Continue with other calendars even if one fails
+        }
+      }
       
-      return eventDate >= sevenDaysAgo && eventDate <= twoWeeksFromNow;
-    });
+      // Separate past and future events
+      const pastEvents = allEvents.filter((event: CalendarEvent) => {
+        const eventDate = event.start.dateTime ? new Date(event.start.dateTime) : new Date(event.start.date!);
+        return eventDate < now;
+      });
+
+      const upcomingEvents = allEvents.filter((event: CalendarEvent) => {
+        const eventDate = event.start.dateTime ? new Date(event.start.dateTime) : new Date(event.start.date!);
+        return eventDate >= now;
+      });
+
+      // Analyze patterns
+      const pastPatterns = this.analyzePastPatterns(pastEvents);
+      const upcomingPatterns = this.analyzeUpcomingPatterns(upcomingEvents);
+      const trends = this.analyzeTrends(pastEvents, upcomingEvents);
+
+      return {
+        pastEvents,
+        pastPatterns,
+        upcomingEvents,
+        upcomingPatterns,
+        trends,
+      };
+    } catch (error) {
+      console.error('Error fetching calendar trends:', error);
+      throw error;
+    }
   }
 
+  private analyzePastPatterns(pastEvents: CalendarEvent[]) {
+    const eventTypes = pastEvents.map(event => this.categorizeEvent(event).type);
+    const eventTypeCounts = eventTypes.reduce((acc, type) => {
+      acc[type] = (acc[type] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+
+    // Most frequent event types
+    const mostFrequentEventTypes = Object.entries(eventTypeCounts)
+      .sort(([,a], [,b]) => b - a)
+      .slice(0, 5)
+      .map(([type]) => type);
+
+    // Average events per day
+    const averageEventsPerDay = pastEvents.length / 14;
+
+    // Busiest days of the week
+    const dayCounts = pastEvents.reduce((acc, event) => {
+      const eventDate = event.start.dateTime ? new Date(event.start.dateTime) : new Date(event.start.date!);
+      const dayName = eventDate.toLocaleDateString('en-US', { weekday: 'long' });
+      acc[dayName] = (acc[dayName] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+
+    const busiestDays = Object.entries(dayCounts)
+      .sort(([,a], [,b]) => b - a)
+      .slice(0, 3)
+      .map(([day]) => day);
+
+    // Common meeting times
+    const timeCounts = pastEvents.reduce((acc, event) => {
+      if (event.start.dateTime) {
+        const hour = new Date(event.start.dateTime).getHours();
+        const timeSlot = `${hour.toString().padStart(2, '0')}:00`;
+        acc[timeSlot] = (acc[timeSlot] || 0) + 1;
+      }
+      return acc;
+    }, {} as Record<string, number>);
+
+    const commonMeetingTimes = Object.entries(timeCounts)
+      .sort(([,a], [,b]) => b - a)
+      .slice(0, 5)
+      .map(([time]) => time);
+
+    // Find recurring events
+    const recurringEvents = pastEvents
+      .filter(event => event.recurrence && event.recurrence.length > 0)
+      .map(event => ({
+        title: event.summary || 'Untitled Event',
+        frequency: this.determineRecurrenceFrequency(event.recurrence![0]),
+        lastOccurrence: event.start.dateTime || event.start.date!,
+      }));
+
+    return {
+      mostFrequentEventTypes,
+      averageEventsPerDay: Math.round(averageEventsPerDay * 10) / 10,
+      busiestDays,
+      commonMeetingTimes,
+      recurringEvents,
+    };
+  }
+
+  private analyzeUpcomingPatterns(upcomingEvents: CalendarEvent[]) {
+    const eventTypes = upcomingEvents.map(event => this.categorizeEvent(event).type);
+    const scheduledEventTypes = [...new Set(eventTypes)];
+
+    // Find upcoming deadlines (events with keywords like 'deadline', 'due', 'submit')
+    const deadlineKeywords = ['deadline', 'due', 'submit', 'deliver', 'present', 'review'];
+    const upcomingDeadlines = upcomingEvents.filter(event => {
+      const text = `${event.summary} ${event.description}`.toLowerCase();
+      return deadlineKeywords.some(keyword => text.includes(keyword));
+    });
+
+    // Calculate free time slots (simplified - assumes 9 AM to 6 PM work hours)
+    const freeTimeSlots = this.calculateFreeTimeSlots(upcomingEvents);
+
+    // Identify busy periods
+    const busyPeriods = this.identifyBusyPeriods(upcomingEvents);
+
+    return {
+      scheduledEventTypes,
+      upcomingDeadlines,
+      freeTimeSlots,
+      busyPeriods,
+    };
+  }
+
+  private analyzeTrends(pastEvents: CalendarEvent[], upcomingEvents: CalendarEvent[]) {
+    const pastEventCount = pastEvents.length;
+    const upcomingEventCount = upcomingEvents.length;
+    
+    // Event frequency trend
+    let eventFrequencyTrend: 'increasing' | 'decreasing' | 'stable' = 'stable';
+    if (upcomingEventCount > pastEventCount * 1.2) {
+      eventFrequencyTrend = 'increasing';
+    } else if (upcomingEventCount < pastEventCount * 0.8) {
+      eventFrequencyTrend = 'decreasing';
+    }
+
+    // Work-life balance score (simplified calculation)
+    const workEvents = [...pastEvents, ...upcomingEvents].filter(event => 
+      this.categorizeEvent(event).type === 'work'
+    ).length;
+    const totalEvents = pastEvents.length + upcomingEvents.length;
+    const workLifeBalanceScore = totalEvents > 0 ? Math.max(1, Math.min(10, 10 - (workEvents / totalEvents * 10))) : 5;
+
+    // Meeting density
+    const meetingEvents = [...pastEvents, ...upcomingEvents].filter(event => 
+      event.summary?.toLowerCase().includes('meeting') || 
+      event.summary?.toLowerCase().includes('call')
+    ).length;
+    const meetingDensityTrend: 'low' | 'medium' | 'high' = meetingEvents > totalEvents * 0.6 ? 'high' : 
+                               meetingEvents > totalEvents * 0.3 ? 'medium' : 'low';
+
+    // Productivity windows (times with fewer meetings)
+    const productivityWindows = this.findProductivityWindows([...pastEvents, ...upcomingEvents]);
+
+    // Social activity level
+    const socialEvents = [...pastEvents, ...upcomingEvents].filter(event => 
+      this.categorizeEvent(event).type === 'social'
+    ).length;
+    const socialActivityLevel: 'low' | 'medium' | 'high' = socialEvents > totalEvents * 0.2 ? 'high' : 
+                               socialEvents > totalEvents * 0.1 ? 'medium' : 'low';
+
+    return {
+      eventFrequencyTrend,
+      workLifeBalanceScore: Math.round(workLifeBalanceScore),
+      meetingDensityTrend,
+      productivityWindows,
+      socialActivityLevel,
+    };
+  }
+
+  private determineRecurrenceFrequency(recurrenceRule: string): 'daily' | 'weekly' | 'monthly' {
+    if (recurrenceRule.includes('DAILY')) return 'daily';
+    if (recurrenceRule.includes('WEEKLY')) return 'weekly';
+    if (recurrenceRule.includes('MONTHLY')) return 'monthly';
+    return 'weekly'; // default
+  }
+
+  private calculateFreeTimeSlots(upcomingEvents: CalendarEvent[]) {
+    // Simplified calculation - assumes 9 AM to 6 PM work hours
+    const freeTimeSlots: { date: string; availableHours: string[] }[] = [];
+    
+    for (let i = 0; i < 14; i++) {
+      const date = new Date();
+      date.setDate(date.getDate() + i);
+      const dateStr = date.toISOString().split('T')[0];
+      
+      const dayEvents = upcomingEvents.filter(event => {
+        const eventDate = event.start.dateTime ? new Date(event.start.dateTime) : new Date(event.start.date!);
+        return eventDate.toISOString().split('T')[0] === dateStr;
+      });
+
+      // Simple availability calculation
+      const availableHours = ['09:00-11:00', '11:00-13:00', '14:00-16:00', '16:00-18:00'];
+      freeTimeSlots.push({
+        date: dateStr,
+        availableHours: dayEvents.length < 3 ? availableHours : availableHours.slice(0, 2),
+      });
+    }
+
+    return freeTimeSlots;
+  }
+
+  private identifyBusyPeriods(upcomingEvents: CalendarEvent[]) {
+    const busyPeriods: { date: string; eventCount: number; description: string }[] = [];
+    
+    for (let i = 0; i < 14; i++) {
+      const date = new Date();
+      date.setDate(date.getDate() + i);
+      const dateStr = date.toISOString().split('T')[0];
+      
+      const dayEvents = upcomingEvents.filter(event => {
+        const eventDate = event.start.dateTime ? new Date(event.start.dateTime) : new Date(event.start.date!);
+        return eventDate.toISOString().split('T')[0] === dateStr;
+      });
+
+      if (dayEvents.length >= 4) {
+        busyPeriods.push({
+          date: dateStr,
+          eventCount: dayEvents.length,
+          description: `${dayEvents.length} events scheduled`,
+        });
+      }
+    }
+
+    return busyPeriods;
+  }
+
+  private findProductivityWindows(allEvents: CalendarEvent[]) {
+    // Find hours with fewer meetings (9 AM to 6 PM)
+    const hourCounts = Array(10).fill(0); // 9 AM to 6 PM = 10 hours
+    
+    allEvents.forEach(event => {
+      if (event.start.dateTime) {
+        const hour = new Date(event.start.dateTime).getHours();
+        if (hour >= 9 && hour < 19) {
+          hourCounts[hour - 9]++;
+        }
+      }
+    });
+
+    // Find hours with least meetings
+    const productivityWindows = hourCounts
+      .map((count, index) => ({ hour: index + 9, count }))
+      .sort((a, b) => a.count - b.count)
+      .slice(0, 3)
+      .map(({ hour }) => `${hour.toString().padStart(2, '0')}:00`);
+
+    return productivityWindows;
+  }
+
+  /**
+   * Calculate free time slots for the next 4 weeks for event recommendations
+   */
   calculateFreeTimeSlotsForRecommendations(
     events: CalendarEvent[], 
     persona: any, 
@@ -569,17 +738,21 @@ Rules:
       weekday: string;
     }> = [];
     
+    // Get user's typical schedule from persona
     const typicalStart = persona?.profile?.typical_day_start_local || '09:00';
     const typicalEnd = persona?.profile?.typical_day_end_local || '18:00';
     const quietHours = persona?.profile?.quiet_hours || '22:00-07:00';
     
+    // Parse quiet hours
     const [quietStart, quietEnd] = quietHours.split('-');
     
+    // Generate free slots for each day
     for (let i = 0; i < 28; i++) {
       const date = new Date(now.getTime() + (i * 24 * 60 * 60 * 1000));
       const dateStr = date.toISOString().split('T')[0];
       const weekday = date.toLocaleDateString('en-US', { weekday: 'long' });
       
+      // Get events for this day
       const dayEvents = events.filter(event => {
         const eventDate = event.start.dateTime ? 
           new Date(event.start.dateTime).toISOString().split('T')[0] :
@@ -587,23 +760,25 @@ Rules:
         return eventDate === dateStr;
       });
       
+      // Sort events by start time
       dayEvents.sort((a, b) => {
         const aTime = a.start.dateTime || a.start.date || '';
         const bTime = b.start.dateTime || b.start.date || '';
         return new Date(aTime).getTime() - new Date(bTime).getTime();
       });
       
+      // Find gaps between events
       const gaps = [];
       let lastEndTime = typicalStart;
       
       for (const event of dayEvents) {
         const eventStart = event.start.dateTime ? 
           new Date(event.start.dateTime).toTimeString().slice(0, 5) :
-          '09:00';
+          '09:00'; // Default for all-day events
         
         if (eventStart > lastEndTime) {
           const duration = this.timeDiffInMinutes(lastEndTime, eventStart);
-          if (duration >= 60) {
+          if (duration >= 60) { // Only include gaps of 60+ minutes
             gaps.push({
               date: dateStr,
               start_time: lastEndTime,
@@ -616,11 +791,12 @@ Rules:
         
         const eventEnd = event.end.dateTime ? 
           new Date(event.end.dateTime).toTimeString().slice(0, 5) :
-          '17:00';
+          '17:00'; // Default for all-day events
         
         lastEndTime = eventEnd;
       }
       
+      // Add gap after last event if there's time before quiet hours
       if (lastEndTime < quietStart) {
         const duration = this.timeDiffInMinutes(lastEndTime, quietStart);
         if (duration >= 60) {
@@ -640,9 +816,9 @@ Rules:
     return freeSlots;
   }
 
-  private timeDiffInMinutes(start: string, end: string): number {
-    const startTime = new Date(`2000-01-01T${start}:00`);
-    const endTime = new Date(`2000-01-01T${end}:00`);
-    return (endTime.getTime() - startTime.getTime()) / (1000 * 60);
+  private timeDiffInMinutes(startTime: string, endTime: string): number {
+    const start = new Date(`2000-01-01T${startTime}:00`);
+    const end = new Date(`2000-01-01T${endTime}:00`);
+    return (end.getTime() - start.getTime()) / (1000 * 60);
   }
 }

@@ -7,11 +7,25 @@ export const digestStorage = new Map<string, {
   createdAt: string;
 }>();
 
-export function storeDigest(digestId: string, content: string): void {
+export function storeDigest(digestId: string, content: string, audioUrl?: string): void {
+  const existing = digestStorage.get(digestId);
+
   digestStorage.set(digestId, {
     id: digestId,
     content,
-    createdAt: new Date().toISOString(),
+    audioUrl: audioUrl ?? existing?.audioUrl,
+    createdAt: existing?.createdAt ?? new Date().toISOString(),
+  });
+}
+
+export function updateDigestAudio(digestId: string, audioUrl: string): void {
+  const existing = digestStorage.get(digestId);
+
+  digestStorage.set(digestId, {
+    id: digestId,
+    content: existing?.content ?? '',
+    createdAt: existing?.createdAt ?? new Date().toISOString(),
+    audioUrl,
   });
 }
 

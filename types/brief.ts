@@ -1,32 +1,31 @@
 export interface SourceAttribution {
+  type: 'news' | 'weather' | 'event' | 'calendar' | 'service';
+  name: string;
   url: string;
-  title: string;
-  domain: string;
-  publishedDate?: string;
-  credibilityScore?: number;
-  type: 'news' | 'event' | 'weather' | 'calendar' | 'service' | 'other';
+  credibilityScore: number;
+  lastUpdated?: string;
 }
 
 export interface BriefItem {
   id: string;
   title: string;
-  content: string;
-  category: 'news' | 'events' | 'weather' | 'opportunities' | 'personal';
-  priority: number;
-  sources: SourceAttribution[];
+  summary: string;
+  source: SourceAttribution;
+  category: 'work' | 'personal' | 'health' | 'social' | 'education' | 'other';
+  priority: 'high' | 'medium' | 'low';
   timestamp: string;
+  relevanceScore: number;
 }
 
-export interface MorningBrief {
-  id: string;
-  userId: string;
-  generatedAt: string;
+export interface BriefContext {
   items: BriefItem[];
-  summary: string;
-  calendarEvent?: {
-    title: string;
-    description: string;
-    startTime: string;
-    endTime: string;
+  generatedAt: string;
+  timeRange: {
+    start: string;
+    end: string;
+  };
+  totalItems: number;
+  categories: {
+    [key: string]: number;
   };
 }
