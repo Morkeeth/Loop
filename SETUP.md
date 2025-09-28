@@ -115,7 +115,7 @@ loop-app/
 ├── lib/                   # Utility libraries
 │   ├── google-auth.ts    # Google authentication
 │   ├── calendar-service.ts # Calendar operations
-│   └── persona-generator.ts # AI persona generation
+│   └── (removed - using Persona API instead)
 ├── types/                 # TypeScript definitions
 │   ├── calendar.ts       # Calendar types
 │   └── persona.ts       # Persona types

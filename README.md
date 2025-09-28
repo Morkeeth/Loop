@@ -97,7 +97,7 @@ loop-labs/
 ├── lib/                 # Utility libraries
 │   ├── google-auth.ts   # Google OAuth utilities
 │   ├── calendar-service.ts # Calendar data processing
-│   └── persona-generator.ts # AI persona generation
+│   └── (removed - using Persona API instead)
 ├── types/               # TypeScript type definitions
 │   ├── calendar.ts     # Calendar-related types
 │   └── persona.ts      # Persona-related types

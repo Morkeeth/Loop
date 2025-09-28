@@ -51,15 +51,28 @@ export async function POST(request: NextRequest) {
       .replace(/\*\*/g, '')
       .trim();
 
-    // Call OpenAI GPT-4.1 (alias gpt-4o) with the system prompt and calendar data (larger context window)
+    // Call OpenAI GPT-4o with the system prompt and calendar data (larger context window)
     console.log('Calling OpenAI API...');
     console.log('Calendar data size:', JSON.stringify(calendarData).length, 'characters');
     console.log('System prompt size:', cleanSystemPrompt.length, 'characters');
     
+    // Check context length for GPT-4o (128k tokens)
+    const totalContentLength = cleanSystemPrompt.length + JSON.stringify(calendarData).length;
+    const estimatedTokens = Math.ceil(totalContentLength / 4);
+    console.log(`Estimated token usage: ${estimatedTokens}`);
+    
+    if (estimatedTokens > 100000) { // Conservative limit for GPT-4o
+      console.warn(`High token usage detected (${estimatedTokens}), consider reducing calendar data`);
+    }
+    
     let response;
     try {
+      console.log('Making OpenAI request with model:', process.env.OPENAI_PERSONA_MODEL || 'gpt-4o');
+      console.log('System prompt preview:', cleanSystemPrompt.substring(0, 200) + '...');
+      console.log('User content preview:', JSON.stringify(calendarData).substring(0, 200) + '...');
+      
       response = await openai.chat.completions.create({
-        model: process.env.OPENAI_PERSONA_MODEL || 'gpt-4.1',
+        model: process.env.OPENAI_PERSONA_MODEL || 'gpt-4o',
         messages: [
           {
             role: 'system',
@@ -92,16 +105,23 @@ export async function POST(request: NextRequest) {
           temperature: 0.3,
           max_tokens: 2000,
         });
+      } else if (openaiError.status === 429) {
+        console.error('OpenAI API quota exceeded (429 error)');
+        throw new Error('OpenAI API quota exceeded. Please check your billing details and try again later.');
       } else {
         throw openaiError;
       }
     }
     
     console.log('OpenAI response received');
+    console.log('Response structure:', JSON.stringify(response, null, 2));
 
     const content = response.choices[0]?.message?.content;
     if (!content) {
-      throw new Error('No response from OpenAI');
+      console.error('No content in OpenAI response');
+      console.error('Response choices:', response.choices);
+      console.error('Response usage:', response.usage);
+      throw new Error(`No response content from OpenAI. Response: ${JSON.stringify(response)}`);
     }
 
     // Extract JSON from the response

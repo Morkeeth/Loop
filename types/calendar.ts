@@ -31,6 +31,10 @@ export interface CalendarEvent {
   hangoutLink?: string;
   htmlLink?: string;
   recurringEventId?: string;
+  // Calendar information (added when fetching from multiple calendars)
+  calendarId?: string;
+  calendarSummary?: string;
+  calendarAccessRole?: string;
 }
 
 export interface CalendarData {

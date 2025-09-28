@@ -26,6 +26,10 @@ function normalizeEvent(event: any) {
     recurrence: event.recurrence,
     hangoutLink: event.hangoutLink,
     htmlLink: event.htmlLink,
+    // Include calendar information if available
+    calendarId: event.calendarId,
+    calendarSummary: event.calendarSummary,
+    calendarAccessRole: event.calendarAccessRole,
   };
 }
 
@@ -37,6 +41,9 @@ function minifyEvents(events: NormalizedEvent[]) {
     loc: event.location,
     attn: event.attendees?.slice(0, 5).map((attendee: { email: string }) => attendee.email),
     recur: Boolean(event.recurrence?.length || event.recurringEventId),
+    // Include calendar info in minified version
+    cal: event.calendarSummary || 'Primary',
+    calId: event.calendarId,
   }));
 }
 
@@ -75,8 +82,8 @@ export async function GET(request: NextRequest) {
     }
 
     const calendarService = new CalendarService(accessToken);
-    const events = await calendarService.fetchCalendarEvents(monthsBack);
-    const normalized = events.map(normalizeEvent);
+    const result = await calendarService.fetchCalendarEventsWithMetadata(monthsBack);
+    const normalized = result.events.map(normalizeEvent);
     const timeframe = getTimeframe(normalized);
 
     let insights: string[] = [];
@@ -92,7 +99,8 @@ export async function GET(request: NextRequest) {
       insights,
       timeframe,
       count: normalized.length,
-      monthsBack,
+      monthsBack: result.actualMonthsUsed,
+      requestedMonthsBack: monthsBack,
     });
 
   } catch (error) {
