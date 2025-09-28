@@ -3,6 +3,7 @@ import OpenAI from 'openai';
 import fs from 'fs';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
+import { storeDigest } from '@/lib/digest-storage';
 
 import { DigestContext } from '@/types/digest-context';
 
@@ -73,69 +74,29 @@ ${promptBody}`;
     console.log('User prompt size:', userPrompt.length, 'characters');
     console.log('System prompt size:', systemPrompt.length, 'characters');
 
-    console.log('Attempting to generate digest with gpt-5 via Responses API...');
-    const response = await openai.responses.create({
-      model: 'gpt-5',
-      input: [
+    console.log('Attempting to generate digest with gpt-4o...');
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [
         {
-          role: 'developer',
-          content: [
-            {
-              type: 'input_text',
-              text: systemPrompt,
-            },
-          ],
+          role: 'system',
+          content: systemPrompt,
         },
         {
           role: 'user',
-          content: [
-            {
-              type: 'input_text',
-              text: userPrompt,
-            },
-          ],
+          content: userPrompt,
         },
       ],
-      text: {
-        format: {
-          type: 'text',
-        },
-        verbosity: 'medium',
-      },
-      reasoning: {
-        effort: 'medium',
-      },
-      tools: [
-        {
-          type: 'web_search',
-          user_location: {
-            type: 'approximate',
-          },
-          search_context_size: 'medium',
-        },
-      ],
-      store: true,
-      include: ['reasoning.encrypted_content', 'web_search_call.action.sources'] as any,
+      max_tokens: 1000,
+      temperature: 0.7,
     });
 
     console.log('OpenAI response received');
 
-    const outputText =
-      (response as any).output_text ||
-      ((response as any).output
-        ?.map((item: any) =>
-          item.content
-            ?.map((chunk: any) =>
-              typeof chunk.text === 'string'
-                ? chunk.text
-                : chunk.text?.value ?? ''
-            )
-            .join('')
-        )
-        .join(''));
+    const outputText = response.choices[0]?.message?.content || '';
 
     if (!outputText || !outputText.trim()) {
-      throw new Error('No text output returned from GPT-5 response');
+      throw new Error('No text output returned from GPT-4o response');
     }
 
     console.log('Digest generated successfully, length:', outputText.length);
@@ -150,16 +111,10 @@ ${promptBody}`;
       createdAt: new Date().toISOString(),
     };
 
-    // Store digest record (in production, use a database)
-    // For now, we'll make it available via the audio API
+    // Store digest record using the digest storage
     try {
-      await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/digest/audio/${digestId}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(digestRecord),
-      });
+      storeDigest(digestId, outputText);
+      console.log('Digest stored successfully with ID:', digestId);
     } catch (error) {
       console.error('Failed to store digest record:', error);
     }

@@ -25,6 +25,9 @@ export default function AudioDigestPage() {
     fetchDigestData();
   }, [digestId]);
 
+  // Do NOT auto-generate on open; only play if audio already exists.
+  // If audio is missing, show a button to generate.
+
   const fetchDigestData = async () => {
     try {
       setIsLoading(true);
@@ -138,20 +141,14 @@ export default function AudioDigestPage() {
           <div className="mb-6">
             <h2 className="text-xl font-semibold text-black mb-4">Listen to Your Digest</h2>
             
-            {!digestData.audioUrl ? (
+            {isGeneratingAudio ? (
               <div>
-                <p className="text-black mb-6">
-                  Generate audio version of your digest with Marcel's French accent
+                <div className="animate-spin h-12 w-12 border-b-2 border-black mx-auto mb-4"></div>
+                <p className="text-black">
+                  Generating audio with Marcel's French accent...
                 </p>
-                <button
-                  onClick={generateAudio}
-                  disabled={isGeneratingAudio}
-                  className="minimal-button"
-                >
-                  {isGeneratingAudio ? 'Generating Audio...' : 'Generate Audio'}
-                </button>
               </div>
-            ) : (
+            ) : digestData.audioUrl ? (
               <div>
                 <button
                   onClick={togglePlayback}
@@ -168,8 +165,20 @@ export default function AudioDigestPage() {
                   )}
                 </button>
                 <p className="text-black">
-                  {isPlaying ? 'Playing...' : 'Click to play'}
+                  {isPlaying ? 'Playing your Sunday brief...' : 'Click to play your Sunday brief'}
                 </p>
+              </div>
+            ) : (
+              <div>
+                <p className="text-black mb-4">
+                  Preparing your audio digest...
+                </p>
+                <button
+                  onClick={generateAudio}
+                  className="minimal-button"
+                >
+                  Generate Audio
+                </button>
               </div>
             )}
           </div>
