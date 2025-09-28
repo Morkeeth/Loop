@@ -112,3 +112,119 @@ body {
   background: black;
   color: white;
 }
+
+/* Tetris-like Falling Calendar Background */
+.tetris-background {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  z-index: 0;
+  background: white;
+}
+
+/* Calendar Grid Base */
+.tetris-grid {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-image: 
+    linear-gradient(90deg, transparent 0%, transparent 98%, rgba(0,0,0,0.15) 98%, rgba(0,0,0,0.15) 100%),
+    linear-gradient(0deg, transparent 0%, transparent 98%, rgba(0,0,0,0.1) 98%, rgba(0,0,0,0.1) 100%);
+  background-size: 100px 60px;
+  background-position: 0 0;
+}
+
+/* Tetris Falling Blocks */
+.tetris-blocks {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+/* Calendar Event Blocks - Monochrome */
+.tetris-block {
+  position: absolute;
+  background: rgba(0, 0, 0, 0.1);
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  border-left: 3px solid rgba(0, 0, 0, 0.4);
+  animation: tetris-fall 8s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+  border-radius: 2px;
+  padding: 8px;
+  font-size: 12px;
+  color: #333;
+  font-weight: 500;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 50px;
+  transform-origin: center bottom;
+}
+
+.event-title {
+  font-weight: 600;
+  font-size: 13px;
+  margin-bottom: 2px;
+  line-height: 1.2;
+}
+
+.event-time {
+  font-size: 11px;
+  opacity: 0.8;
+  margin-bottom: 2px;
+}
+
+.event-location {
+  font-size: 10px;
+  opacity: 0.7;
+  font-style: italic;
+}
+
+/* Calendar Event Block Shapes and Positions - Dynamic (handled by React) */
+.tetris-block {
+  position: absolute;
+  top: -60px;
+}
+
+@keyframes tetris-fall {
+  0% {
+    transform: translateY(0px) rotate(0deg) scale(1);
+    opacity: 1;
+  }
+  20% {
+    transform: translateY(20vh) rotate(2deg) scale(1.02);
+    opacity: 1;
+  }
+  40% {
+    transform: translateY(40vh) rotate(-1deg) scale(1.01);
+    opacity: 1;
+  }
+  60% {
+    transform: translateY(60vh) rotate(1deg) scale(1);
+    opacity: 1;
+  }
+  80% {
+    transform: translateY(80vh) rotate(-0.5deg) scale(0.99);
+    opacity: 1;
+  }
+  90% {
+    transform: translateY(90vh) rotate(0deg) scale(0.98);
+    opacity: 1;
+  }
+  95% {
+    transform: translateY(calc(90vh + 20px)) rotate(0deg) scale(0.97);
+    opacity: 0.8;
+  }
+  100% {
+    transform: translateY(calc(90vh + 40px)) rotate(0deg) scale(0.95);
+    opacity: 0;
+  }
+}
