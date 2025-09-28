@@ -99,12 +99,12 @@ function Dashboard() {
       localStorage.setItem('accessToken', token);
       
       // Clean up URL by removing the token parameters
-      const cleanUrl = new URL(window.location.href);
-      cleanUrl.searchParams.delete('access_token');
-      cleanUrl.searchParams.delete('refresh_token');
-      cleanUrl.searchParams.delete('user_email');
-      cleanUrl.searchParams.delete('user_name');
-      window.history.replaceState({}, '', cleanUrl.toString());
+        const cleanUrl = new URL(window.location.href);
+        cleanUrl.searchParams.delete('access_token');
+        cleanUrl.searchParams.delete('refresh_token');
+        cleanUrl.searchParams.delete('user_email');
+        cleanUrl.searchParams.delete('user_name');
+        window.history.replaceState({}, '', cleanUrl.toString());
     } else {
       // Check if we have a stored access token
       const storedToken = localStorage.getItem('accessToken');
@@ -148,17 +148,17 @@ function Dashboard() {
       setIsLoadingCalendar(true);
       setIsLoadingInsights(true);
 
-      const response = await fetch(
-        `/api/calendar?accessToken=${encodeURIComponent(accessToken)}&monthsBack=6&insights=true`
-      );
+        const response = await fetch(
+          `/api/calendar?accessToken=${encodeURIComponent(accessToken)}&monthsBack=6&insights=true`
+        );
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
 
-        if (response.status === 401 || response.status === 403) {
-          localStorage.removeItem('accessToken');
-          localStorage.removeItem('userEmail');
-          localStorage.removeItem('userName');
+          if (response.status === 401 || response.status === 403) {
+              localStorage.removeItem('accessToken');
+              localStorage.removeItem('userEmail');
+              localStorage.removeItem('userName');
           window.location.href = '/';
           return;
         }
@@ -188,25 +188,25 @@ function Dashboard() {
 
     try {
       setIsGeneratingPersona(true);
-      const response = await fetch('/api/persona', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          calendarData: {
-            now_iso: new Date().toISOString(),
-            default_timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-            calendars: [{ id: 'primary', summary: 'Primary Calendar' }],
+          const response = await fetch('/api/persona', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              calendarData: {
+                now_iso: new Date().toISOString(),
+                default_timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+                calendars: [{ id: 'primary', summary: 'Primary Calendar' }],
             events: calendarPayload.minified,
-          },
-        }),
-      });
+              },
+            }),
+          });
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || errorData.details || 'Failed to generate persona');
-      }
+          if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.error || errorData.details || 'Failed to generate persona');
+          }
 
       const data = await response.json();
       setPersona(data);
@@ -252,17 +252,17 @@ function Dashboard() {
       
       // Store the mock digest via API
       const response = await fetch('/api/digest/store', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
           digestId: mockResult.digestId,
           content: mockResult.content,
-        }),
-      });
+          }),
+        });
 
-      if (!response.ok) {
+        if (!response.ok) {
         throw new Error('Failed to store test digest');
       }
       
@@ -284,11 +284,11 @@ function Dashboard() {
       setIsCreatingEvent(true);
 
       // Calculate next Sunday at 15:00
-      const now = new Date();
-      const daysUntilSunday = (7 - now.getDay()) % 7;
-      const nextSunday = new Date(now);
-      nextSunday.setDate(now.getDate() + (daysUntilSunday === 0 ? 7 : daysUntilSunday));
-      nextSunday.setHours(15, 0, 0, 0);
+        const now = new Date();
+        const daysUntilSunday = (7 - now.getDay()) % 7;
+        const nextSunday = new Date(now);
+        nextSunday.setDate(now.getDate() + (daysUntilSunday === 0 ? 7 : daysUntilSunday));
+        nextSunday.setHours(15, 0, 0, 0);
 
       // Format digest for calendar with proper link titles
       const formatDigestForCalendar = (content: string) => {
@@ -305,37 +305,37 @@ function Dashboard() {
           });
       };
 
-      const eventData = {
-        summary: 'Circling Back',
-        location: 'by Loop',
+        const eventData = {
+          summary: 'Circling Back',
+          location: 'by Loop',
         description: formatDigestForCalendar(digest),
-        start: {
-          dateTime: nextSunday.toISOString(),
+          start: {
+            dateTime: nextSunday.toISOString(),
           timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-        },
-        end: {
+          },
+          end: {
           dateTime: new Date(nextSunday.getTime() + 60 * 60 * 1000).toISOString(), // 1 hour duration
           timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-        },
-      };
+          },
+        };
 
-      const response = await fetch('/api/calendar', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          accessToken,
-          eventData,
-        }),
-      });
+        const response = await fetch('/api/calendar', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            accessToken,
+            eventData,
+          }),
+        });
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || 'Failed to create calendar event');
-      }
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.error || 'Failed to create calendar event');
+        }
 
-      const result = await response.json();
+        const result = await response.json();
       console.log('Calendar event created:', result);
       
       // Show success message (you could add a toast notification here)
@@ -356,12 +356,18 @@ function Dashboard() {
     try {
       setIsGeneratingSuggestions(true);
       
-      const response = await fetch('/api/autopopulate/generate', {
+      const response = await fetch('/api/recommendations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           persona,
-          calendarData: calendarPayload.minified,
+          calendarEvents: calendarPayload.events,
+          userLocation: {
+            city: persona?.profile?.home_base?.city || 'San Francisco',
+            country: persona?.profile?.home_base?.country || 'US',
+            timezone: persona?.profile?.primary_timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
+          },
+          currentDate: new Date().toISOString(),
         }),
       });
 
@@ -546,12 +552,18 @@ function Dashboard() {
           }),
         });
 
-        const recommendationsPromise = fetch('/api/autopopulate/generate', {
+        const recommendationsPromise = fetch('/api/recommendations', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             persona: persona,
-            calendarData: calendarPayload.events || []
+            calendarEvents: calendarPayload.events,
+            userLocation: {
+              city: persona?.profile?.home_base?.city || 'San Francisco',
+              country: persona?.profile?.home_base?.country || 'US',
+              timezone: persona?.profile?.primary_timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
+            },
+            currentDate: new Date().toISOString(),
           }),
         });
 
@@ -595,7 +607,7 @@ function Dashboard() {
         }
 
         const recommendationsData = await recommendationsResponse.json();
-        recommendations = recommendationsData.suggestions || [];
+        recommendations = recommendationsData.recommendations?.flatMap((week: any) => week.recommendations) || [];
 
         setPipelineProgress({ digest: 100, recommendations: 100, calendar: 0, audio: 0 });
         setPipelineStatus('Parallel execution completed successfully!');
@@ -663,12 +675,18 @@ function Dashboard() {
 
         try {
           await retryOperation(async () => {
-            const recommendationsResponse = await fetch('/api/autopopulate/generate', {
+            const recommendationsResponse = await fetch('/api/recommendations', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 persona: persona,
-                calendarData: calendarPayload.events || []
+                calendarEvents: calendarPayload.events,
+                userLocation: {
+                  city: persona?.profile?.home_base?.city || 'San Francisco',
+                  country: persona?.profile?.home_base?.country || 'US',
+                  timezone: persona?.profile?.primary_timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
+                },
+                currentDate: new Date().toISOString(),
               }),
             });
 
@@ -677,7 +695,7 @@ function Dashboard() {
             }
 
             const recommendationsData = await recommendationsResponse.json();
-            recommendations = recommendationsData.suggestions || [];
+            recommendations = recommendationsData.recommendations?.flatMap((week: any) => week.recommendations) || [];
           }, 'Recommendations Generation');
 
           setPipelineProgress({ digest: 100, recommendations: 100, calendar: 0, audio: 0 });
@@ -852,10 +870,10 @@ function Dashboard() {
 
   const renderTab = () => {
     if (!calendarPayload) {
-      return (
+        return (
         <div className="rounded border border-dashed border-gray-300 bg-gray-50 p-10 text-center text-sm text-gray-500">
           Loading calendar history…
-        </div>
+          </div>
       );
     }
 
@@ -946,39 +964,39 @@ function Dashboard() {
                   <div className="space-y-4">
                     <div className="text-sm font-medium text-gray-700">
                       {pipelineStatus}
-                    </div>
+                  </div>
                     
                     <div className="space-y-3">
                       <div className="flex items-center justify-between">
                         <span className="text-sm text-gray-600">Digest Generation</span>
                         <span className="text-sm font-medium">{pipelineProgress.digest}%</span>
-                      </div>
+                  </div>
                       <div className="w-full bg-gray-200 rounded-full h-2">
                         <div 
                           className="bg-blue-600 h-2 rounded-full transition-all duration-300"
                           style={{ width: `${pipelineProgress.digest}%` }}
                         />
-                      </div>
+                </div>
                     </div>
 
                     <div className="space-y-3">
                       <div className="flex items-center justify-between">
                         <span className="text-sm text-gray-600">Recommendations</span>
                         <span className="text-sm font-medium">{pipelineProgress.recommendations}%</span>
-                      </div>
+                  </div>
                       <div className="w-full bg-gray-200 rounded-full h-2">
                         <div 
                           className="bg-green-600 h-2 rounded-full transition-all duration-300"
                           style={{ width: `${pipelineProgress.recommendations}%` }}
                         />
-                      </div>
+          </div>
                     </div>
 
-                    <div className="space-y-3">
+              <div className="space-y-3">
                       <div className="flex items-center justify-between">
                         <span className="text-sm text-gray-600">Calendar Integration</span>
                         <span className="text-sm font-medium">{pipelineProgress.calendar}%</span>
-                      </div>
+              </div>
                       <div className="w-full bg-gray-200 rounded-full h-2">
                         <div 
                           className="bg-purple-600 h-2 rounded-full transition-all duration-300"
@@ -1009,15 +1027,15 @@ function Dashboard() {
                         <svg className="w-6 h-6 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
                         </svg>
-                      </div>
+          </div>
                       <div>
                         <h3 className="text-sm font-medium text-amber-800">Persona Required</h3>
                         <p className="text-sm text-amber-700 mt-1">
                           You need to generate your persona first before using the Auto Pipeline. 
                           Go to the <strong>Persona</strong> tab to create your personalized profile.
-                        </p>
-                      </div>
-                    </div>
+                </p>
+              </div>
+          </div>
                   </div>
                 )}
 
@@ -1027,15 +1045,15 @@ function Dashboard() {
                       <div className="flex-shrink-0">
                         <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                        </svg>
-                      </div>
+              </svg>
+            </div>
                       <div>
                         <h3 className="text-sm font-medium text-blue-800">Calendar Data Required</h3>
                         <p className="text-sm text-blue-700 mt-1">
                           Load your calendar data first to enable the Auto Pipeline. 
                           The calendar data is automatically loaded when you visit the dashboard.
                         </p>
-                      </div>
+          </div>
                     </div>
                   </div>
                 )}
@@ -1059,12 +1077,12 @@ function Dashboard() {
                   </div>
                 )}
               </div>
-            </div>
-          </div>
-        );
+        </div>
+      </div>
+    );
       default:
         return null;
-    }
+  }
   };
 
   if (!accessToken) {
@@ -1089,16 +1107,16 @@ function Dashboard() {
             <div>
               <h1 className="text-lg font-semibold text-black">Loop Labs</h1>
               <p className="text-xs uppercase tracking-wide text-gray-600">Calendar intelligence sandbox</p>
-            </div>
           </div>
+        </div>
           <button
             onClick={handleSignOut}
             className="text-sm text-gray-600 hover:text-black uppercase tracking-wide"
           >
             Sign Out
           </button>
-        </div>
-      </div>
+            </div>
+            </div>
 
       <main className="max-w-6xl mx-auto px-6 py-6 space-y-6">
         {calendarPayload ? (
@@ -1108,11 +1126,11 @@ function Dashboard() {
             eventCount={calendarPayload.count}
             key={insightTick} 
           />
-        ) : null}
+                        ) : null}
 
         <nav className="flex flex-wrap gap-0 border border-black">
           {tabItems.map((tab) => (
-            <button
+              <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               className={`border-r border-black px-6 py-3 text-sm font-medium transition uppercase tracking-wide ${
@@ -1122,7 +1140,7 @@ function Dashboard() {
               } ${tab.id === tabItems[tabItems.length - 1].id ? 'border-r-0' : ''}`}
             >
               {tab.label}
-            </button>
+              </button>
           ))}
         </nav>
 
@@ -1130,7 +1148,7 @@ function Dashboard() {
           {isLoadingCalendar ? (
             <div className="border border-black bg-white p-10 text-center text-sm text-black">
               Fetching the last six months from Google Calendar…
-            </div>
+          </div>
           ) : (
             renderTab()
           )}
@@ -1141,7 +1159,7 @@ function Dashboard() {
 }
 
 export default function DashboardPage() {
-  return (
+      return (
     <Suspense fallback={
       <div className="min-h-screen bg-white flex items-center justify-center">
         <div className="text-center">
