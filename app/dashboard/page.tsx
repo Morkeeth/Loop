@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import NumberFlow from '@number-flow/react';
-import { SuggestPanel } from '@/components/SuggestPanel';
 
 type StepStatus = 'pending' | 'active' | 'complete' | 'error';
 
@@ -73,7 +72,7 @@ const PIPELINE_TEMPLATE: Array<Omit<PipelineStep, 'status' | 'error'>> = [
   {
     id: 'persona',
     title: 'Create Persona',
-    description: 'Summarising your rhythms, rituals, and working style with GPT-4.1',
+    description: 'Summarising your rhythms, rituals, and working style with GPT-4o',
   },
   {
     id: 'digest',
@@ -197,7 +196,7 @@ function Dashboard() {
   const [digestResult, setDigestResult] = useState<DigestResult | null>(null);
   const [audioDataUrl, setAudioDataUrl] = useState<string | null>(null);
   const [agentData, setAgentData] = useState<{agentId: string, agentUrl: string} | null>(null);
-  const [suggestions, setSuggestions] = useState<any[]>([]);
+  const [recommendations, setRecommendations] = useState<any | null>(null);
   const [calendarEvent, setCalendarEvent] = useState<any | null>(null);
 
   const [isRunning, setIsRunning] = useState(false);
@@ -363,32 +362,80 @@ function Dashboard() {
         );
       
       case 'suggest':
-        return suggestions.length > 0 ? (
+        return recommendations && recommendations.recommendations ? (
           <div className="mt-4 p-4 bg-gray-50 rounded-lg w-full">
-            <h4 className="font-semibold mb-2">Suggested Events ({suggestions.length})</h4>
-            <div className="space-y-2 max-h-64 overflow-y-auto">
-              {suggestions.slice(0, 5).map((suggestion, index) => (
-                <div key={index} className="p-3 border rounded bg-white">
-                  <div className="flex items-center gap-2 mb-1">
-                    <h5 className="font-medium text-sm">{suggestion.title}</h5>
-                    <span className="px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded">
-                      {suggestion.category}
-                    </span>
+            <h4 className="font-semibold mb-3">Exceptional Event Recommendations</h4>
+            <p className="text-xs text-gray-600 mb-3">
+              Found {recommendations.metadata?.total_recommendations || 0} high-quality events
+            </p>
+            <div className="space-y-3 max-h-96 overflow-y-auto">
+              {recommendations.recommendations?.map((week: any, weekIndex: number) => (
+                <div key={weekIndex} className="border rounded-lg p-3 bg-white">
+                  <h5 className="font-medium text-sm text-gray-700 mb-2">
+                    Week of {new Date(week.week_start_date).toLocaleDateString()}
+                  </h5>
+                  <div className="space-y-2">
+                    {week.recommendations?.map((rec: any, recIndex: number) => (
+                      <div key={recIndex} className={`flex justify-between items-start p-2 rounded ${
+                        rec.is_placeholder ? 'bg-yellow-50 border border-yellow-200' : 'bg-gray-50'
+                      }`}>
+                        <div className="flex-1">
+                          <h6 className={`font-medium text-sm ${
+                            rec.is_placeholder ? 'text-yellow-800' : ''
+                          }`}>
+                            {rec.title}
+                            {rec.is_placeholder && (
+                              <span className="ml-2 text-xs bg-yellow-200 text-yellow-800 px-2 py-1 rounded">
+                                PLACEHOLDER
+                              </span>
+                            )}
+                          </h6>
+                          <p className="text-xs text-gray-600 mt-1">{rec.description}</p>
+                          {rec.is_placeholder && (
+                            <p className="text-xs text-yellow-700 mt-1 font-medium">
+                              ⚠️ {rec.conflict_reason === 'conflicts_with_existing_event' 
+                                ? 'Conflicts with existing calendar event' 
+                                : 'Does not fit in available free time slot'}
+                            </p>
+                          )}
+                          <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
+                            <span>📅 {rec.date} at {rec.start_time}</span>
+                            <span>📍 {rec.location}</span>
+                            <span>💰 {rec.cost}</span>
+                            <span className={`px-2 py-1 rounded text-xs ${
+                              rec.category === 'professional' ? 'bg-blue-100 text-blue-800' :
+                              rec.category === 'social' ? 'bg-green-100 text-green-800' :
+                              rec.category === 'cultural' ? 'bg-purple-100 text-purple-800' :
+                              rec.category === 'fitness' ? 'bg-orange-100 text-orange-800' :
+                              'bg-gray-100 text-gray-800'
+                            }`}>
+                              {rec.category}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-xs text-gray-500 mb-1">
+                            Relevance: {Math.round(rec.relevance_score * 100)}%
+                          </div>
+                          <a 
+                            href={rec.source_url} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="text-xs text-blue-600 hover:text-blue-800"
+                          >
+                            View Event →
+                          </a>
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                  <p className="text-xs text-gray-600 mb-1">
-                    {new Date(suggestion.startTime).toLocaleDateString()} at{' '}
-                    {new Date(suggestion.startTime).toLocaleTimeString([], {
-                      hour: '2-digit',
-                      minute: '2-digit'
-                    })}
-                  </p>
-                  <p className="text-xs text-gray-500">{suggestion.reason}</p>
                 </div>
               ))}
-              {suggestions.length > 5 && (
-                <p className="text-xs text-gray-500 text-center">
-                  ... and {suggestions.length - 5} more suggestions
-                </p>
+            </div>
+            <div className="mt-3 text-xs text-gray-500">
+              <p>Confidence: {Math.round((recommendations.metadata?.confidence_score || 0) * 100)}%</p>
+              {recommendations.metadata?.caveats?.length > 0 && (
+                <p>Caveats: {recommendations.metadata.caveats.join(', ')}</p>
               )}
             </div>
           </div>
@@ -772,61 +819,79 @@ function Dashboard() {
         return result.event;
       });
 
-      // Generate suggestions independently after digest session is scheduled
+      // Generate recommendations using GPT-5 with web search
       await executeStep('suggest', async () => {
-        const response = await fetch('/api/suggest/generate', {
+        const response = await fetch('/api/recommendations', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
             persona: personaData,
-            calendarData: calendar.minified,
+            calendarEvents: calendar.events,
+            userLocation: {
+              city: personaData.profile?.home_base?.city || 'San Francisco',
+              country: personaData.profile?.home_base?.country || 'US',
+              timezone: personaData.profile?.primary_timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
+            },
+            currentDate: new Date().toISOString(),
           }),
         });
 
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}));
-          console.warn('Suggest generation failed:', errorData.error);
-          // Don't throw error for suggest failure, just return empty array
-          return { suggestions: [] };
+          console.warn('Recommendations generation failed:', errorData.error);
+          return { recommendations: [], metadata: { total_recommendations: 0 } };
         }
 
-        const suggestPayload = await response.json();
-        const suggestionsWithIds = suggestPayload.suggestions?.map((suggestion: any, index: number) => ({
-          ...suggestion,
-          id: `suggestion_${Date.now()}_${index}`,
-          selected: true, // Default to selected
-        })) || [];
-        
-        setSuggestions(suggestionsWithIds);
+        const recommendationsPayload = await response.json();
+        setRecommendations(recommendationsPayload);
 
-        // Automatically add all suggestions to calendar
-        if (suggestionsWithIds.length > 0 && accessToken) {
+        // Automatically add all recommended events to calendar (excluding placeholders)
+        if (recommendationsPayload.recommendations && accessToken) {
           try {
-            console.log('Automatically adding', suggestionsWithIds.length, 'suggested events to calendar...');
-            const addResponse = await fetch('/api/suggest/write', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                suggestions: suggestionsWithIds,
-                accessToken,
-              }),
-            });
+            console.log('Automatically adding recommended events to calendar...');
+            
+            // Flatten all recommendations into a single array, excluding placeholders
+            const allEvents = recommendationsPayload.recommendations.flatMap((week: any) => 
+              week.recommendations?.filter((rec: any) => !rec.is_placeholder).map((rec: any) => ({
+                title: rec.title,
+                description: rec.description,
+                startTime: new Date(`${rec.date}T${rec.start_time}`).toISOString(),
+                endTime: new Date(`${rec.date}T${rec.end_time || rec.start_time}`).toISOString(),
+                location: rec.location,
+                category: rec.category,
+                source_url: rec.source_url,
+                relevance_score: rec.relevance_score,
+              })) || []
+            );
 
-            if (addResponse.ok) {
-              const addData = await addResponse.json();
-              console.log(`Successfully added ${addData.createdEvents} events to calendar automatically`);
+            if (allEvents.length > 0) {
+              const addResponse = await fetch('/api/calendar/events', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  events: allEvents,
+                  accessToken,
+                }),
+              });
+
+              if (addResponse.ok) {
+                const addData = await addResponse.json();
+                console.log(`Successfully added ${addData.createdEvents || allEvents.length} recommended events to calendar`);
+              } else {
+                const errorData = await addResponse.json().catch(() => ({}));
+                console.warn('Failed to auto-add recommended events:', errorData.error);
+              }
             } else {
-              const errorData = await addResponse.json().catch(() => ({}));
-              console.warn('Failed to auto-add events:', errorData.error);
+              console.log('No non-placeholder events to add to calendar');
             }
           } catch (error) {
-            console.warn('Error auto-adding events:', error);
+            console.warn('Error auto-adding recommended events:', error);
           }
         }
 
-        return suggestPayload;
+        return recommendationsPayload;
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Something went wrong while orchestrating the flow';
@@ -1232,7 +1297,7 @@ function Dashboard() {
                                (step.id === 'digest' && digestResult) ||
                                (step.id === 'audio' && audioDataUrl) ||
                                (step.id === 'agent' && agentData) ||
-                               (step.id === 'suggest' && suggestions.length > 0) ||
+                               (step.id === 'suggest' && recommendations && recommendations.recommendations) ||
                                (step.id === 'event' && calendarEvent);
               
               if (step.id === 'agent') {
@@ -1283,55 +1348,6 @@ function Dashboard() {
               );
             })}
           </ul>
-
-          {/* Suggest Panel */}
-          {pipelineComplete && suggestions.length > 0 && (
-            <div className="mt-8">
-              <SuggestPanel
-                persona={persona}
-                calendarPayload={calendarPayload}
-                accessToken={accessToken}
-                onGenerate={() => {}} // Already generated in pipeline
-                onAddToCalendar={() => {}} // Already added automatically
-                onUndo={async () => {
-                  // Optimistic UI: show removing state immediately
-                  setActiveStepDescriptions((prev) => ({ ...prev, suggest: 4 }));
-                  try {
-                    // Set temporary loading flag by toggling local copy
-                    const undoBtn = document.activeElement as HTMLButtonElement | null;
-                    if (undoBtn) undoBtn.disabled = true;
-
-                    const response = await fetch('/api/suggest/undo', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ accessToken }),
-                    });
-
-                    if (!response.ok) {
-                      const errorData = await response.json().catch(() => ({}));
-                      throw new Error(errorData.error || 'Failed to undo events');
-                    }
-
-                    const data = await response.json();
-                    // Immediate visual feedback
-                    setSuggestions([]);
-                    alert(`Successfully removed ${data.deletedEvents} events and cleaned up Autoplan calendar!`);
-                  } catch (err) {
-                    console.error('Undo failed:', err);
-                    alert(err instanceof Error ? err.message : 'Failed to undo events');
-                  } finally {
-                    setActiveStepDescriptions((prev) => ({ ...prev, suggest: 0 }));
-                  }
-                }}
-                isGenerating={false}
-                isAddingToCalendar={false}
-                isUndoing={false}
-                suggestions={suggestions}
-                onToggleSuggestion={() => {}} // No longer needed since events are auto-added
-                autoAdded={true}
-              />
-            </div>
-          )}
 
           <div className="mt-6">
             {hasFailure ? (

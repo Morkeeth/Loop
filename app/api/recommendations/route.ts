@@ -277,9 +277,16 @@ RULES:
       };
     }
 
+    // Detect conflicts and mark events as placeholders
+    const recommendationsWithConflicts = detectConflictsAndMarkPlaceholders(
+      recommendations, 
+      calendarEvents, 
+      freeTimeSlots
+    );
+
     return NextResponse.json({
       success: true,
-      ...recommendations,
+      ...recommendationsWithConflicts,
       usage: (response as any).usage,
       metadata: {
         reasoning: (response as any).reasoning,
@@ -298,6 +305,62 @@ RULES:
       { status: 500 }
     );
   }
+}
+
+function detectConflictsAndMarkPlaceholders(
+  recommendations: RecommendationsResponse,
+  calendarEvents: any[],
+  freeTimeSlots: any[]
+): RecommendationsResponse {
+  if (!recommendations.recommendations) {
+    return recommendations;
+  }
+
+  const modifiedRecommendations = {
+    ...recommendations,
+    recommendations: recommendations.recommendations.map(week => ({
+      ...week,
+      recommendations: week.recommendations?.map(event => {
+        // Check if this event conflicts with existing calendar events
+        const eventDateTime = new Date(`${event.date}T${event.start_time}`);
+        const eventEndDateTime = new Date(`${event.date}T${event.end_time || event.start_time}`);
+        
+        // Check for conflicts with existing events
+        const hasConflict = calendarEvents.some(existingEvent => {
+          const existingStart = new Date(existingEvent.start.dateTime || existingEvent.start.date);
+          const existingEnd = new Date(existingEvent.end.dateTime || existingEvent.end.date);
+          
+          // Check if times overlap
+          return (eventDateTime < existingEnd && eventEndDateTime > existingStart);
+        });
+        
+        // Check if it fits in any free time slot
+        const fitsInFreeSlot = freeTimeSlots.some(slot => {
+          const slotStart = new Date(`${slot.date}T${slot.start_time}`);
+          const slotEnd = new Date(`${slot.date}T${slot.end_time}`);
+          
+          return (eventDateTime >= slotStart && eventEndDateTime <= slotEnd);
+        });
+        
+        // Mark as placeholder if there's a conflict or doesn't fit in free slots
+        if (hasConflict || !fitsInFreeSlot) {
+          return {
+            ...event,
+            title: `Placeholder: ${event.title}`,
+            is_placeholder: true,
+            conflict_reason: hasConflict ? 'conflicts_with_existing_event' : 'does_not_fit_free_slot'
+          };
+        }
+        
+        return {
+          ...event,
+          is_placeholder: false
+        };
+      })
+    }))
+  };
+
+  return modifiedRecommendations;
 }
 
 function generateSearchQueries(persona: PersonaProfile, userLocation: { city: string; country: string }): string[] {
