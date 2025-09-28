@@ -106,11 +106,18 @@ export default function LoadingScreen({ onComplete, userId, events }: LoadingScr
           const personaResponse = await fetch('/api/persona', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ events, userId }),
+            body: JSON.stringify({
+              calendarData: {
+                now_iso: new Date().toISOString(),
+                default_timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+                calendars: [{ id: 'primary', summary: 'Primary Calendar' }],
+                events: events,
+              },
+            }),
           });
 
           if (personaResponse.ok) {
-            const { persona } = await personaResponse.json();
+            const persona = await personaResponse.json();
             
             // Complete loading with persona
             setTimeout(() => {

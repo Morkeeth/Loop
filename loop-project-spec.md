@@ -193,7 +193,7 @@ File structure:
   /google-auth.ts
   /calendar-service.ts
   /openai-service.ts
-  /persona-generator.ts
+  /(removed - using Persona API instead)
 /types
   /calendar.ts
   /persona.ts
