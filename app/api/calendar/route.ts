@@ -82,8 +82,8 @@ export async function GET(request: NextRequest) {
     }
 
     const calendarService = new CalendarService(accessToken);
-    const result = await calendarService.fetchCalendarEventsWithMetadata(monthsBack);
-    const normalized = result.events.map(normalizeEvent);
+    const events = await calendarService.fetchCalendarEvents(monthsBack);
+    const normalized = events.map(normalizeEvent);
     const timeframe = getTimeframe(normalized);
 
     let insights: string[] = [];
@@ -99,7 +99,7 @@ export async function GET(request: NextRequest) {
       insights,
       timeframe,
       count: normalized.length,
-      monthsBack: result.actualMonthsUsed,
+      monthsBack: monthsBack,
       requestedMonthsBack: monthsBack,
     });
 
