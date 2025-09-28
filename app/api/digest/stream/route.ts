@@ -3,7 +3,7 @@ import OpenAI from 'openai';
 import fs from 'fs';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
-import { storeDigest } from '@/lib/digest-storage';
+import { storeDigest, updateDigestAudio } from '@/lib/digest-storage';
 
 import { DigestContext } from '@/types/digest-context';
 
@@ -304,7 +304,7 @@ ${outputText}`;
         };
 
         try {
-          storeDigest(digestId, contentWithAudioLink);
+          storeDigest(digestId, contentWithAudioLink, audioUrl);
 
           sendLog({
             step: 'storage',
