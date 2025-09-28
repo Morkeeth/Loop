@@ -18,3 +18,21 @@ export function storeDigest(digestId: string, content: string): void {
 export function getDigest(digestId: string) {
   return digestStorage.get(digestId);
 }
+
+export function setDigestAudioUrl(digestId: string, audioUrl: string): void {
+  const existing = digestStorage.get(digestId);
+  if (existing) {
+    digestStorage.set(digestId, {
+      ...existing,
+      audioUrl,
+    });
+  } else {
+    // If content wasn't stored yet, at least persist the audio URL with minimal record
+    digestStorage.set(digestId, {
+      id: digestId,
+      content: '',
+      audioUrl,
+      createdAt: new Date().toISOString(),
+    });
+  }
+}
