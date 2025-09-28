@@ -219,6 +219,33 @@ function Dashboard() {
     }
   }, [calendarPayload]);
 
+  // Helper function to get digest events (7 days back + 2 weeks forward, minified)
+  const getDigestEvents = useCallback(() => {
+    if (!calendarPayload) return [];
+    
+    const now = new Date();
+    const sevenDaysAgo = new Date(now.getTime() - (7 * 24 * 60 * 60 * 1000));
+    const twoWeeksFromNow = new Date(now.getTime() + (14 * 24 * 60 * 60 * 1000));
+    
+    const digestEvents = calendarPayload.events.filter(event => {
+      const eventDate = event.start.dateTime ? 
+        new Date(event.start.dateTime) : 
+        new Date(event.start.date!);
+      
+      return eventDate >= sevenDaysAgo && eventDate <= twoWeeksFromNow;
+    });
+
+    // Return minified format
+    return digestEvents.map((event) => ({
+      s: event.summary,
+      st: event.start?.dateTime || event.start?.date,
+      et: event.end?.dateTime || event.end?.date,
+      loc: event.location,
+      attn: event.attendees?.slice(0, 5).map((attendee: { email: string }) => attendee.email),
+      recur: Boolean(event.recurrence?.length || event.recurringEventId),
+    }));
+  }, [calendarPayload]);
+
   const handleGenerateDigest = useCallback(async () => {
     if (!persona || !calendarPayload) {
       setActiveTab('persona');
@@ -228,7 +255,7 @@ function Dashboard() {
     setIsGeneratingDigest(true);
     setActiveTab('digest');
 
-    const digestWindow = calendarPayload.minified;
+    const digestWindow = getDigestEvents();
     const requestData = {
       personaText: JSON.stringify(persona, null, 2),
       recentCalendarJson: JSON.stringify(digestWindow, null, 2),
@@ -236,7 +263,7 @@ function Dashboard() {
     };
 
     setDigestRequestData(requestData);
-  }, [persona, calendarPayload]);
+  }, [persona, calendarPayload, getDigestEvents]);
 
   const handleDigestComplete = useCallback((result: any) => {
     setDigest(result.content);
@@ -547,7 +574,7 @@ function Dashboard() {
           body: JSON.stringify({
             digestContext: {
               persona: persona,
-              recent_calendar_json: calendarPayload.events || []
+              recent_calendar_json: getDigestEvents()
             }
           }),
         });
@@ -630,7 +657,7 @@ function Dashboard() {
             body: JSON.stringify({
               digestContext: {
                 persona: persona,
-                recent_calendar_json: calendarPayload.events || []
+                recent_calendar_json: getDigestEvents()
               }
             }),
           });

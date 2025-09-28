@@ -38,7 +38,7 @@ SIGN-OFF — exactly:
 
 DATA INPUT
 • `persona_text` – compact persona profile  
-• `recent_calendar_json` – past 3-4 weeks + next 2 weeks of calendar  
+• `recent_calendar_json` – past 7 days + next 2 weeks of calendar (minified format)  
 • Deduplicate series; down-weight all-day / holiday calendars  
 • If data sparse → keep copy brief.
 

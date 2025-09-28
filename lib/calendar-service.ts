@@ -529,6 +529,24 @@ Rules:
   }
 
   // Method to calculate free time slots for recommendations
+  // Filter events for digest timeframe (7 days back + 2 weeks forward)
+  filterEventsForDigest(
+    events: CalendarEvent[],
+    currentDate: string = new Date().toISOString()
+  ): CalendarEvent[] {
+    const now = new Date(currentDate);
+    const sevenDaysAgo = new Date(now.getTime() - (7 * 24 * 60 * 60 * 1000));
+    const twoWeeksFromNow = new Date(now.getTime() + (14 * 24 * 60 * 60 * 1000));
+    
+    return events.filter(event => {
+      const eventDate = event.start.dateTime ? 
+        new Date(event.start.dateTime) : 
+        new Date(event.start.date!);
+      
+      return eventDate >= sevenDaysAgo && eventDate <= twoWeeksFromNow;
+    });
+  }
+
   calculateFreeTimeSlotsForRecommendations(
     events: CalendarEvent[], 
     persona: any, 
