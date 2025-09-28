@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { storeDigest, updateDigestAudio } from '@/lib/digest-storage';
 
 export async function POST(request: NextRequest) {
   try {
@@ -62,8 +63,10 @@ export async function POST(request: NextRequest) {
     const audioDataUrl = `data:audio/mpeg;base64,${audioBase64}`;
 
     // Update digest with audio URL
-    // In production, you'd store this in a database
-    // For now, we'll return the data URL directly
+    updateDigestAudio(digestId, audioDataUrl);
+
+    storeDigest(digestId, content, audioDataUrl);
+
     return NextResponse.json({
       audioUrl: audioDataUrl,
       digestId,

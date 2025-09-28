@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDigest, storeDigest } from '@/lib/digest-storage';
+import { getDigest, storeDigest, updateDigestAudio } from '@/lib/digest-storage';
 
 export async function GET(
   request: NextRequest,
@@ -32,7 +32,7 @@ export async function POST(
 ) {
   try {
     const { id: digestId } = await params;
-    const { content } = await request.json();
+    const { content, audioUrl } = await request.json();
 
     if (!content) {
       return NextResponse.json(
@@ -41,7 +41,7 @@ export async function POST(
       );
     }
 
-    storeDigest(digestId, content);
+    storeDigest(digestId, content, audioUrl);
 
     return NextResponse.json({
       id: digestId,

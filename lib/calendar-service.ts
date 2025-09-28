@@ -177,22 +177,10 @@ Rules:
     };
   }
 
-  async fetchCalendarEvents(monthsBack: number = 3): Promise<CalendarEvent[]> {
+  async fetchCalendarList(): Promise<any[]> {
     try {
-      const now = new Date();
-      const startDate = new Date(now.getFullYear(), now.getMonth() - monthsBack, 1);
-      const endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-
-      const params = new URLSearchParams({
-        timeMin: startDate.toISOString(),
-        timeMax: endDate.toISOString(),
-        singleEvents: 'true',
-        orderBy: 'startTime',
-        maxResults: '2500', // Google Calendar API limit
-      });
-
       const response = await fetch(
-        `https://www.googleapis.com/calendar/v3/calendars/primary/events?${params}`,
+        'https://www.googleapis.com/calendar/v3/users/me/calendarList',
         {
           headers: {
             Authorization: `Bearer ${this.accessToken}`,
@@ -213,6 +201,69 @@ Rules:
 
       const data = await response.json();
       return data.items || [];
+    } catch (error) {
+      console.error('Error fetching calendar list:', error);
+      throw error;
+    }
+  }
+
+  async fetchCalendarEvents(monthsBack: number = 3): Promise<CalendarEvent[]> {
+    try {
+      const now = new Date();
+      const startDate = new Date(now.getFullYear(), now.getMonth() - monthsBack, 1);
+      const endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+
+      const params = new URLSearchParams({
+        timeMin: startDate.toISOString(),
+        timeMax: endDate.toISOString(),
+        singleEvents: 'true',
+        orderBy: 'startTime',
+        maxResults: '2500', // Google Calendar API limit
+      });
+
+      // Fetch calendar list to get all accessible calendars
+      const calendarList = await this.fetchCalendarList();
+      const allEvents: CalendarEvent[] = [];
+
+      // Fetch events from each calendar
+      for (const calendar of calendarList) {
+        try {
+          const response = await fetch(
+            `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendar.id)}/events?${params}`,
+            {
+              headers: {
+                Authorization: `Bearer ${this.accessToken}`,
+                'Content-Type': 'application/json',
+              },
+            }
+          );
+
+          if (response.ok) {
+            const data = await response.json();
+            const events = data.items || [];
+            // Add calendar metadata to each event
+            const eventsWithCalendar = events.map((event: CalendarEvent) => ({
+              ...event,
+              calendarId: calendar.id,
+              calendarSummary: calendar.summary,
+              calendarAccessRole: calendar.accessRole,
+            }));
+            allEvents.push(...eventsWithCalendar);
+          } else {
+            console.warn(`Failed to fetch events from calendar ${calendar.id}: ${response.status}`);
+          }
+        } catch (error) {
+          console.warn(`Error fetching events from calendar ${calendar.id}:`, error);
+          // Continue with other calendars even if one fails
+        }
+      }
+
+      // Sort all events by start time
+      return allEvents.sort((a, b) => {
+        const aStart = a.start?.dateTime || a.start?.date || '';
+        const bStart = b.start?.dateTime || b.start?.date || '';
+        return new Date(aStart).getTime() - new Date(bStart).getTime();
+      });
     } catch (error) {
       console.error('Error fetching calendar events:', error);
       throw error;
@@ -383,28 +434,42 @@ Rules:
         maxResults: '2500',
       });
 
-      const response = await fetch(
-        `https://www.googleapis.com/calendar/v3/calendars/primary/events?${params}`,
-        {
-          headers: {
-            Authorization: `Bearer ${this.accessToken}`,
-            'Content-Type': 'application/json',
-          },
-        }
-      );
+      // Fetch calendar list to get all accessible calendars
+      const calendarList = await this.fetchCalendarList();
+      const allEvents: CalendarEvent[] = [];
 
-      if (!response.ok) {
-        if (response.status === 401) {
-          throw new Error('Calendar access token expired. Please re-authenticate with Google.');
-        } else if (response.status === 403) {
-          throw new Error('Calendar access denied. Please check your permissions.');
-        } else {
-          throw new Error(`Calendar API error: ${response.status}`);
+      // Fetch events from each calendar
+      for (const calendar of calendarList) {
+        try {
+          const response = await fetch(
+            `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendar.id)}/events?${params}`,
+            {
+              headers: {
+                Authorization: `Bearer ${this.accessToken}`,
+                'Content-Type': 'application/json',
+              },
+            }
+          );
+
+          if (response.ok) {
+            const data = await response.json();
+            const events = data.items || [];
+            // Add calendar metadata to each event
+            const eventsWithCalendar = events.map((event: CalendarEvent) => ({
+              ...event,
+              calendarId: calendar.id,
+              calendarSummary: calendar.summary,
+              calendarAccessRole: calendar.accessRole,
+            }));
+            allEvents.push(...eventsWithCalendar);
+          } else {
+            console.warn(`Failed to fetch events from calendar ${calendar.id}: ${response.status}`);
+          }
+        } catch (error) {
+          console.warn(`Error fetching events from calendar ${calendar.id}:`, error);
+          // Continue with other calendars even if one fails
         }
       }
-
-      const data = await response.json();
-      const allEvents = data.items || [];
       
       // Separate past and future events
       const pastEvents = allEvents.filter((event: CalendarEvent) => {
@@ -646,5 +711,114 @@ Rules:
       .map(({ hour }) => `${hour.toString().padStart(2, '0')}:00`);
 
     return productivityWindows;
+  }
+
+  /**
+   * Calculate free time slots for the next 4 weeks for event recommendations
+   */
+  calculateFreeTimeSlotsForRecommendations(
+    events: CalendarEvent[], 
+    persona: any, 
+    currentDate: string = new Date().toISOString()
+  ): Array<{
+    date: string;
+    start_time: string;
+    end_time: string;
+    duration_minutes: number;
+    weekday: string;
+  }> {
+    const now = new Date(currentDate);
+    const fourWeeksFromNow = new Date(now.getTime() + (28 * 24 * 60 * 60 * 1000));
+    
+    const freeSlots: Array<{
+      date: string;
+      start_time: string;
+      end_time: string;
+      duration_minutes: number;
+      weekday: string;
+    }> = [];
+    
+    // Get user's typical schedule from persona
+    const typicalStart = persona?.profile?.typical_day_start_local || '09:00';
+    const typicalEnd = persona?.profile?.typical_day_end_local || '18:00';
+    const quietHours = persona?.profile?.quiet_hours || '22:00-07:00';
+    
+    // Parse quiet hours
+    const [quietStart, quietEnd] = quietHours.split('-');
+    
+    // Generate free slots for each day
+    for (let i = 0; i < 28; i++) {
+      const date = new Date(now.getTime() + (i * 24 * 60 * 60 * 1000));
+      const dateStr = date.toISOString().split('T')[0];
+      const weekday = date.toLocaleDateString('en-US', { weekday: 'long' });
+      
+      // Get events for this day
+      const dayEvents = events.filter(event => {
+        const eventDate = event.start.dateTime ? 
+          new Date(event.start.dateTime).toISOString().split('T')[0] :
+          event.start.date;
+        return eventDate === dateStr;
+      });
+      
+      // Sort events by start time
+      dayEvents.sort((a, b) => {
+        const aTime = a.start.dateTime || a.start.date || '';
+        const bTime = b.start.dateTime || b.start.date || '';
+        return new Date(aTime).getTime() - new Date(bTime).getTime();
+      });
+      
+      // Find gaps between events
+      const gaps = [];
+      let lastEndTime = typicalStart;
+      
+      for (const event of dayEvents) {
+        const eventStart = event.start.dateTime ? 
+          new Date(event.start.dateTime).toTimeString().slice(0, 5) :
+          '09:00'; // Default for all-day events
+        
+        if (eventStart > lastEndTime) {
+          const duration = this.timeDiffInMinutes(lastEndTime, eventStart);
+          if (duration >= 60) { // Only include gaps of 60+ minutes
+            gaps.push({
+              date: dateStr,
+              start_time: lastEndTime,
+              end_time: eventStart,
+              duration_minutes: duration,
+              weekday
+            });
+          }
+        }
+        
+        const eventEnd = event.end.dateTime ? 
+          new Date(event.end.dateTime).toTimeString().slice(0, 5) :
+          '17:00'; // Default for all-day events
+        
+        lastEndTime = eventEnd;
+      }
+      
+      // Add gap after last event if there's time before quiet hours
+      if (lastEndTime < quietStart) {
+        const duration = this.timeDiffInMinutes(lastEndTime, quietStart);
+        if (duration >= 60) {
+          gaps.push({
+            date: dateStr,
+            start_time: lastEndTime,
+            end_time: quietStart,
+            duration_minutes: duration,
+            weekday
+          });
+        }
+      }
+      
+      freeSlots.push(...gaps);
+    }
+    
+    return freeSlots;
+  }
+
+  private timeDiffInMinutes(startTime: string, endTime: string): number {
+    const start = new Date(`2000-01-01T${startTime}:00`);
+    const end = new Date(`2000-01-01T${endTime}:00`);
+    return (end.getTime() - start.getTime()) / (1000 * 60);
   }
 }
