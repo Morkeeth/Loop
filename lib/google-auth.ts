@@ -53,6 +53,26 @@ export function getGoogleAuthUrl(): string {
   return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
 }
 
+export async function refreshAccessToken(refreshToken: string): Promise<{ access_token: string; expires_in: number }> {
+  const response = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id: process.env.GOOGLE_CLIENT_ID || '',
+      client_secret: process.env.GOOGLE_CLIENT_SECRET || '',
+      refresh_token: refreshToken,
+      grant_type: 'refresh_token',
+    }),
+  });
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.error_description || 'Failed to refresh access token');
+  }
+
+  return response.json();
+}
+
 export async function exchangeCodeForTokens(code: string) {
   try {
     const response = await fetch('https://oauth2.googleapis.com/token', {

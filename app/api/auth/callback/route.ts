@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { exchangeCodeForTokens } from '@/lib/google-auth';
+import { getUser, saveUser, updateUser } from '@/lib/kv-store';
 
 export async function GET(request: NextRequest) {
   try {
@@ -29,6 +30,36 @@ export async function GET(request: NextRequest) {
 
     const userInfo = await userResponse.json();
 
+    // Save or update user in KV
+    try {
+      const existing = await getUser(userInfo.id);
+      if (existing) {
+        await updateUser(userInfo.id, {
+          email: userInfo.email,
+          name: userInfo.name,
+          picture: userInfo.picture || '',
+          ...(tokens.refresh_token ? { refresh_token: tokens.refresh_token } : {}),
+        });
+      } else {
+        await saveUser({
+          id: userInfo.id,
+          email: userInfo.email,
+          name: userInfo.name,
+          picture: userInfo.picture || '',
+          refresh_token: tokens.refresh_token || '',
+          city: '',
+          timezone: '',
+          tags: [],
+          persona: null,
+          last_event_at: null,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        });
+      }
+    } catch {
+      // KV save failed — non-blocking, user can still use the app
+    }
+
     // Redirect to dashboard — tokens go in secure HTTP-only cookies, NOT URL params
     const response = NextResponse.redirect(`${appUrl}/dashboard`);
 
@@ -38,16 +69,19 @@ export async function GET(request: NextRequest) {
       secure: isProduction,
       sameSite: 'lax' as const,
       path: '/',
-      maxAge: 60 * 60, // 1 hour (matches Google access token lifetime)
+      maxAge: 60 * 60,
     };
 
     response.cookies.set('loop_access_token', tokens.access_token, cookieOptions);
     if (tokens.refresh_token) {
       response.cookies.set('loop_refresh_token', tokens.refresh_token, {
         ...cookieOptions,
-        maxAge: 30 * 24 * 60 * 60, // 30 days
+        maxAge: 30 * 24 * 60 * 60,
       });
     }
+
+    // User ID in httpOnly cookie for API routes to look up KV
+    response.cookies.set('loop_user_id', userInfo.id, cookieOptions);
 
     // User info in a non-httpOnly cookie so the client can read display name/email
     response.cookies.set('loop_user', JSON.stringify({
