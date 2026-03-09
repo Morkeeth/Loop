@@ -13,16 +13,13 @@ const CATEGORY_POOLS = [
 ];
 
 function getRandomSuggestions(): string {
-  // Pick 3 random pools and 1 item from each to steer variety
   const shuffled = [...CATEGORY_POOLS].sort(() => Math.random() - 0.5);
   const picks = shuffled.slice(0, 3).map(pool => pool[Math.floor(Math.random() * pool.length)]);
   return picks.join(', ');
 }
 
-export function buildPrompt(city: string, dateRange: string, persona: any) {
+function buildPersonaBlock(persona: any, city: string): string {
   const profile = persona.profile || {};
-  const hasRichPersona = !!persona.persona_summary_120 && profile.fitness_tags?.length > 0;
-
   const lines: string[] = [];
   if (persona.persona_summary_120) lines.push(persona.persona_summary_120);
   if (profile.field) lines.push(`Works in: ${profile.field}`);
@@ -33,48 +30,66 @@ export function buildPrompt(city: string, dateRange: string, persona: any) {
   if (profile.local_event_interests?.length) lines.push(`Into: ${profile.local_event_interests.join(', ')}`);
   if (profile.interests_tags?.length) lines.push(`Interests: ${profile.interests_tags.join(', ')}`);
 
-  const personaBlock = lines.length > 0
+  return lines.length > 0
     ? `WHO THEY ARE:\n${lines.join('\n')}`
-    : `We don't know much about this person yet — just that they're in ${city} and curious. Find something universally exciting that a culturally-engaged local would love.`;
+    : `We don't know much about this person yet — just that they're in ${city} and curious.`;
+}
 
-  return `You are the friend who ALWAYS knows about the one thing happening in the city that nobody else has found yet. Not the thing on the front page of Time Out. Not the expo at the convention center. The thing that makes someone say "how did you even find this?"
+// ─── Step 1: Search for candidates ──────────────────────────────
 
-Your job: find ONE event in ${city} during ${dateRange}.
+function buildSearchPrompt(city: string, dateRange: string): string {
+  return `Find 5 niche, underground, or hidden-gem events happening in ${city} during ${dateRange}.
+
+SEARCH STRATEGY:
+- Search "${city} events ${dateRange}" on: shotgun.live, dice.fm, ra.co, billetto, eventbrite small venues
+- Search specific neighborhoods and small venues in ${city}
+- Look for: pop-up dinners, listening sessions, gallery openings, intimate workshops, DJ sets at small bars, comedy nights, courtyard screenings, run clubs, wine tastings
+- Think along the lines of: ${getRandomSuggestions()}
+
+RULES — every event MUST have:
+- A specific date and time during ${dateRange}
+- A real venue with a real street address
+- A working URL (direct event page, ticket link, or venue page — NOT a city guide)
+- Under 500 attendees — no expos, festivals, marathons, conventions, or tourist attractions
+
+Return a JSON array of exactly 5 events, no commentary:
+[
+  {
+    "event_title": "The actual event name",
+    "venue": "Venue name",
+    "address": "Full street address",
+    "date": "YYYY-MM-DD",
+    "time": "HH:MM",
+    "end_time": "HH:MM",
+    "url": "Direct event/ticket URL",
+    "category": "music | art | food | tech | wellness | sport | social | culture | other",
+    "one_liner": "One sentence pitch"
+  }
+]`;
+}
+
+// ─── Step 2: Pick the best match ────────────────────────────────
+
+function buildPickPrompt(candidates: string, persona: any, city: string, dateRange: string): string {
+  const personaBlock = buildPersonaBlock(persona, city);
+  const hasRichPersona = !!persona.persona_summary_120 && persona.profile?.fitness_tags?.length > 0;
+
+  return `You are choosing ONE event for someone to attend this week. You have 5 candidates — pick the one that would make them say "how did you even find this?"
 
 ${personaBlock}
 
-WHAT MAKES AN EVENT MAGICAL (all must be true):
-- It's NICHE — under 500 people, not a mass event, not a trade show, not a marathon
-- It's the kind of thing you'd only find on a small venue's Instagram, a local newsletter, or word of mouth
-- It has a SPECIFIC date and time during ${dateRange} — not an ongoing exhibition
-- It's at a REAL venue with a real address you can walk to
-- The event should have a working URL — a direct event page, ticket link, or venue page. Not a generic city guide
-- You'd be genuinely EXCITED to text this to a friend — if it sounds boring, keep searching
+CANDIDATES:
+${candidates}
 
-REJECT THESE (instant disqualification):
-- Expos, trade fairs, conventions, salons, conferences
-- Massive runs/marathons with 1,000+ participants
-- Famous restaurants or bars just... being open (not a special event)
-- Museum exhibitions that run for months
-- Tourist attractions or "top 10 things to do in ${city}" content
-- Anything at a convention center or expo hall
-- Events you aren't confident are happening during ${dateRange}
-- Generic "food festival" or "art fair" with 10,000+ attendees
+PICK THE BEST ONE. Consider:
+- How well it matches their interests and lifestyle
+- How unique and surprising it is (not something they'd find on Google in 5 seconds)
+- Whether the date/time works for ${dateRange}
+${hasRichPersona ? '- Reference something specific from their life in why_this' : '- Explain why this is the most exciting option'}
 
-WHERE TO SEARCH (in this order):
-1. Search "${city} events ${dateRange}" on niche platforms — shotgun.live, dice.fm, ra.co, billetto, eventbrite small venues, local Instagram event aggregators
-2. Search specific neighborhood venues in ${city} — independent galleries, natural wine bars, cultural centers, small music venues, community spaces
-3. Look for: pop-up dinners, listening sessions, gallery vernissages, intimate workshops, DJ sets at small bars, comedy nights, courtyard screenings, run crew social events, wine tastings at caves
-4. Cross-reference with the person's signals if available
+VARIETY: Do NOT default to yoga, wellness, or afrobeats. Surprise them.
 
-VARIETY IS CRITICAL:
-- Do NOT default to yoga, wellness, or afrobeats every time — surprise us
-- Think along the lines of: ${getRandomSuggestions()} — but find whatever genuinely fits this person and this week
-- The goal is that no two requests ever return the same type of event
-
-${hasRichPersona ? 'Pick the ONE that connects to their specific life — reference their actual interests, not generic categories.' : 'Pick the ONE most exciting, unexpected event happening in the city.'}
-
-Return JSON only — no commentary:
+Return JSON only — the single best event:
 {
   "event_title": "The actual event name as listed",
   "venue": "Venue name",
@@ -83,11 +98,41 @@ Return JSON only — no commentary:
   "time": "HH:MM",
   "end_time": "HH:MM",
   "description": "2-3 sentences. Sell it like you're texting your best friend at 6pm asking if they're free tonight.",
-  "url": "Direct link to the event page or ticket page — NOT a generic city guide URL",
+  "url": "Direct link to the event page or ticket page",
   "category": "music | art | food | tech | wellness | sport | social | culture | other",
-  "why_this": "${hasRichPersona ? 'One sentence connecting this to something specific in their life' : 'One sentence on why this is the most exciting thing happening in the city this week'}"
+  "why_this": "One sentence on why THIS event for THIS person"
 }`;
 }
+
+// ─── Step 3: Verify URL ─────────────────────────────────────────
+
+async function verifyUrl(url: string): Promise<boolean> {
+  if (!url || url.length < 10) return false;
+  try {
+    const res = await fetch(url, {
+      method: 'HEAD',
+      redirect: 'follow',
+      signal: AbortSignal.timeout(5000),
+    });
+    // Accept any 2xx or 3xx — some ticket sites return 3xx
+    return res.status < 400;
+  } catch {
+    // HEAD might be blocked, try GET
+    try {
+      const res = await fetch(url, {
+        method: 'GET',
+        redirect: 'follow',
+        signal: AbortSignal.timeout(5000),
+        headers: { 'Range': 'bytes=0-0' }, // minimal download
+      });
+      return res.status < 400;
+    } catch {
+      return false;
+    }
+  }
+}
+
+// ─── Shared helpers ─────────────────────────────────────────────
 
 export function getDateRange() {
   const today = new Date();
@@ -101,10 +146,50 @@ export function getDateRange() {
 
 export function parseJsonFromText(text: string): any {
   let clean = text.trim().replace(/```json\s*/g, '').replace(/```\s*/g, '');
-  const match = clean.match(/\{[\s\S]*\}/);
-  if (match) clean = match[0];
+  // Try array first, then object
+  const arrayMatch = clean.match(/\[[\s\S]*\]/);
+  if (arrayMatch) return JSON.parse(arrayMatch[0]);
+  const objMatch = clean.match(/\{[\s\S]*\}/);
+  if (objMatch) return JSON.parse(objMatch[0]);
   return JSON.parse(clean);
 }
+
+// ─── Provider clients ───────────────────────────────────────────
+
+function getOpenRouterClient() {
+  return new OpenAI({
+    apiKey: process.env.OPENROUTER_API_KEY!,
+    baseURL: 'https://openrouter.ai/api/v1',
+  });
+}
+
+async function searchWithPerplexity(prompt: string): Promise<any[]> {
+  const client = getOpenRouterClient();
+  const response = await client.chat.completions.create({
+    model: 'perplexity/sonar-pro',
+    messages: [{ role: 'user', content: prompt }],
+  });
+
+  const content = response.choices[0]?.message?.content;
+  if (!content) throw new Error('No response from Perplexity');
+  const parsed = parseJsonFromText(content);
+  return Array.isArray(parsed) ? parsed : [parsed];
+}
+
+async function pickWithOpenAI(prompt: string): Promise<any> {
+  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
+  const response = await openai.chat.completions.create({
+    model: 'gpt-4o',
+    messages: [{ role: 'user', content: prompt }],
+    temperature: 0.4,
+  });
+
+  const content = response.choices[0]?.message?.content;
+  if (!content) throw new Error('No response from OpenAI');
+  return parseJsonFromText(content);
+}
+
+// ─── Legacy single-shot providers (for user-provided keys) ──────
 
 export async function discoverWithOpenAI(prompt: string, apiKey: string, model: string) {
   const openai = new OpenAI({ apiKey });
@@ -148,6 +233,48 @@ export async function discoverWithPerplexity(prompt: string, apiKey: string, mod
   return parseJsonFromText(content);
 }
 
+// ─── Legacy single-shot prompt (for user-provided keys) ─────────
+
+export function buildPrompt(city: string, dateRange: string, persona: any) {
+  const personaBlock = buildPersonaBlock(persona, city);
+  const hasRichPersona = !!persona.persona_summary_120 && persona.profile?.fitness_tags?.length > 0;
+
+  return `You are the friend who ALWAYS knows about the one thing happening in the city that nobody else has found yet.
+
+Your job: find ONE event in ${city} during ${dateRange}.
+
+${personaBlock}
+
+WHAT MAKES AN EVENT MAGICAL (all must be true):
+- It's NICHE — under 500 people, not a mass event, not a trade show, not a marathon
+- It has a SPECIFIC date and time during ${dateRange} — not an ongoing exhibition
+- It's at a REAL venue with a real address
+- Working URL — direct event page or ticket link, NOT a generic city guide
+- You'd be genuinely EXCITED to text this to a friend
+
+REJECT: expos, conventions, marathons, restaurants just being open, museums with months-long exhibitions, tourist attractions, anything at a convention center
+
+VARIETY: Do NOT default to yoga, wellness, or afrobeats. Think: ${getRandomSuggestions()}
+
+${hasRichPersona ? 'Pick the ONE that connects to their specific life.' : 'Pick the ONE most exciting, unexpected event.'}
+
+Return JSON only:
+{
+  "event_title": "The actual event name",
+  "venue": "Venue name",
+  "address": "Full street address",
+  "date": "YYYY-MM-DD",
+  "time": "HH:MM",
+  "end_time": "HH:MM",
+  "description": "2-3 sentences selling it like a text to your best friend.",
+  "url": "Direct event/ticket URL",
+  "category": "music | art | food | tech | wellness | sport | social | culture | other",
+  "why_this": "One sentence on why this event for this person"
+}`;
+}
+
+// ─── Main discovery function ────────────────────────────────────
+
 export async function discoverEvent(persona: any, options?: {
   provider?: string;
   apiKey?: string;
@@ -155,20 +282,71 @@ export async function discoverEvent(persona: any, options?: {
 }) {
   const city = persona.profile?.home_base?.city || 'your city';
   const dateRange = getDateRange();
-  const prompt = buildPrompt(city, dateRange, persona);
   const { provider, apiKey: userApiKey, model: userModel } = options || {};
 
-  let event;
-
-  if (provider === 'anthropic' && userApiKey) {
-    event = await discoverWithAnthropic(prompt, userApiKey, userModel || 'claude-sonnet-4-6');
-  } else if (provider === 'perplexity' && userApiKey) {
-    event = await discoverWithPerplexity(prompt, userApiKey, userModel || 'sonar-pro');
-  } else if (provider === 'openai' && userApiKey) {
-    event = await discoverWithOpenAI(prompt, userApiKey, userModel || 'gpt-4o');
-  } else {
-    event = await discoverWithOpenAI(prompt, process.env.OPENAI_API_KEY!, 'gpt-4o');
+  // If user provides their own API key, use legacy single-shot flow
+  if (userApiKey && provider) {
+    const prompt = buildPrompt(city, dateRange, persona);
+    let event;
+    if (provider === 'anthropic') {
+      event = await discoverWithAnthropic(prompt, userApiKey, userModel || 'claude-sonnet-4-6');
+    } else if (provider === 'perplexity') {
+      event = await discoverWithPerplexity(prompt, userApiKey, userModel || 'sonar-pro');
+    } else {
+      event = await discoverWithOpenAI(prompt, userApiKey, userModel || 'gpt-4o');
+    }
+    return { event, dateRange };
   }
 
-  return { event, dateRange };
+  // ─── Multi-step discovery (default) ─────────────────────────
+
+  // Step 1: Perplexity via OpenRouter finds 5 candidates (real-time web search)
+  const searchPrompt = buildSearchPrompt(city, dateRange);
+
+  let candidates: any[];
+  if (process.env.OPENROUTER_API_KEY) {
+    candidates = await searchWithPerplexity(searchPrompt);
+  } else {
+    // Fallback: use OpenAI web search if no OpenRouter key
+    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
+    const response = await openai.responses.create({
+      model: 'gpt-4o',
+      tools: [{ type: 'web_search_preview' }],
+      input: searchPrompt,
+    });
+    const content = response.output_text;
+    if (!content) throw new Error('No candidates found');
+    const parsed = parseJsonFromText(content);
+    candidates = Array.isArray(parsed) ? parsed : [parsed];
+  }
+
+  if (!candidates.length) throw new Error('No event candidates found');
+
+  // Step 2: GPT-4o picks the best match for this person
+  const pickPrompt = buildPickPrompt(
+    JSON.stringify(candidates, null, 2),
+    persona,
+    city,
+    dateRange,
+  );
+  const event = await pickWithOpenAI(pickPrompt);
+
+  // Step 3: Verify the URL is real
+  const urlValid = await verifyUrl(event.url);
+  if (!urlValid) {
+    // Try verifying other candidates' URLs and swap if needed
+    for (const candidate of candidates) {
+      if (candidate.url !== event.url && await verifyUrl(candidate.url)) {
+        event.url = candidate.url;
+        event._url_swapped = true;
+        break;
+      }
+    }
+    // If still no valid URL, mark it but don't fail
+    if (!event._url_swapped) {
+      event._url_unverified = true;
+    }
+  }
+
+  return { event, dateRange, candidateCount: candidates.length };
 }
