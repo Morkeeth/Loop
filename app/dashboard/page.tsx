@@ -13,10 +13,11 @@ import type { Archetype } from '@/lib/archetypes';
 import type { CalendarPayload, DiscoveredEvent } from '@/lib/pipeline-types';
 
 const SEARCH_MESSAGES = [
-  'Searching niche venues...',
-  'Checking pop-ups and one-offs...',
-  'Filtering for something special...',
-  'Almost there...',
+  'Checking hidden venues...',
+  'Scrolling local Instagram...',
+  'Digging through small listings...',
+  'Found some underground stuff...',
+  'Picking the one you\'d actually go to...',
 ];
 
 function Dashboard() {
@@ -60,6 +61,20 @@ function Dashboard() {
       }
     }
   }, []);
+
+  // Wrapper that retries once on 401 (triggers token refresh via session endpoint)
+  const authFetch = useCallback(async (url: string, options?: RequestInit): Promise<Response> => {
+    const res = await fetch(url, options);
+    if (res.status === 401) {
+      // Try refreshing the session
+      const refreshRes = await fetch('/api/auth/session');
+      if (refreshRes.ok) {
+        return fetch(url, options);
+      }
+      router.push('/');
+    }
+    return res;
+  }, [router]);
 
   // --- Auth check via cookie ---
   useEffect(() => {
@@ -140,7 +155,7 @@ function Dashboard() {
 
     try {
       // Fetch calendar — token is in the cookie, server reads it automatically
-      const calRes = await fetch('/api/calendar?monthsBack=6&insights=true');
+      const calRes = await authFetch('/api/calendar?monthsBack=6&insights=true');
       if (!calRes.ok) {
         if (calRes.status === 401 || calRes.status === 403) {
           router.push('/');
@@ -187,6 +202,23 @@ function Dashboard() {
       setPersona(personaData);
       setCachedPersona(personaData);
       setupEditableFields(personaData);
+
+      // Persist persona to KV (non-blocking)
+      fetch('/api/user/persona', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          persona: personaData,
+          city: personaData.profile?.home_base?.city || '',
+          tags: [
+            ...(personaData.profile?.interests_tags || []),
+            ...(personaData.profile?.fitness_tags || []),
+            ...(personaData.profile?.local_event_interests || []),
+          ].filter((v: string, i: number, a: string[]) => a.indexOf(v) === i),
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        }),
+      }).catch(() => {});
+
       setPhase('persona');
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Something went wrong');
@@ -194,7 +226,7 @@ function Dashboard() {
     } finally {
       isRunningRef.current = false;
     }
-  }, [authenticated, router, retryWithBackoff, animateScan]);
+  }, [authenticated, router, retryWithBackoff, animateScan, authFetch]);
 
   function setupEditableFields(p: any) {
     setEditedCity(p.profile?.home_base?.city || '');
@@ -229,6 +261,13 @@ function Dashboard() {
           local_event_interests: editedTags,
         },
       };
+
+      // Persist edited city/tags to KV (non-blocking)
+      fetch('/api/user/persona', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ city: editedCity, tags: editedTags }),
+      }).catch(() => {});
 
       const modelConfig = typeof window !== 'undefined' ? {
         provider: localStorage.getItem('loopModelProvider') || undefined,
@@ -363,17 +402,42 @@ function Dashboard() {
 
   // Searching
   if (phase === 'searching') {
+    const city = editedCity || persona?.profile?.home_base?.city;
     return (
       <div className="min-h-screen bg-white text-black flex flex-col">
         <DashboardHeader />
         <div className="flex-1 flex flex-col items-center justify-center px-6">
-          <div className="space-y-6 text-center max-w-md">
-            <div className="mx-auto h-1 w-32 rounded-full bg-gray-200 overflow-hidden">
-              <div className="h-full bg-black rounded-full animate-pulse" style={{ width: '60%' }} />
+          <div className="max-w-sm w-full space-y-10 text-center">
+            {city && (
+              <p className="text-xs font-semibold uppercase tracking-widest text-gray-400">
+                {city}
+              </p>
+            )}
+
+            <div className="space-y-3">
+              <div className="relative h-0.5 w-full bg-gray-100 rounded-full overflow-hidden">
+                <div className="absolute inset-0 bg-black rounded-full" style={{
+                  animation: 'searchBar 2s ease-in-out infinite',
+                }} />
+              </div>
             </div>
-            <p className="text-lg text-gray-500 font-light">{loadingMessage}</p>
+
+            <div className="space-y-2">
+              <p className="text-xl font-light text-gray-800">{loadingMessage}</p>
+              <p className="text-xs text-gray-400">
+                This takes 10–20 seconds — we're searching real venues
+              </p>
+            </div>
           </div>
         </div>
+
+        <style jsx>{`
+          @keyframes searchBar {
+            0% { transform: translateX(-100%); width: 40%; }
+            50% { transform: translateX(60%); width: 60%; }
+            100% { transform: translateX(-100%); width: 40%; }
+          }
+        `}</style>
       </div>
     );
   }

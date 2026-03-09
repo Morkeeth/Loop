@@ -5,11 +5,11 @@ import { DashboardHeader } from '@/components/DashboardHeader';
 import type { DiscoveredEvent } from '@/lib/pipeline-types';
 
 const SEARCH_PHASES = [
-  'Finding out where you are...',
-  'Scanning events nearby...',
-  'Matching to local culture...',
-  'Found a few candidates...',
-  'Picking the best one...',
+  'Checking hidden venues...',
+  'Scrolling local Instagram...',
+  'Digging through small listings...',
+  'Found some underground stuff...',
+  'Picking the one you\'d actually go to...',
 ];
 
 export default function ExplorePage() {
@@ -92,12 +92,16 @@ export default function ExplorePage() {
     }, 3500);
 
     try {
+      // Rotate interests each request so we don't get the same event type
+      const allInterests = ['culture', 'social', 'music', 'food', 'art', 'wellness', 'comedy', 'film', 'dance', 'vintage', 'craft', 'nightlife'];
+      const shuffled = [...allInterests].sort(() => Math.random() - 0.5).slice(0, 5);
+
       const syntheticPersona = {
         persona_summary_120: `Someone living in ${city} looking for something interesting and unexpected to do this week.`,
         profile: {
           home_base: { city, country: 'unknown' },
-          local_event_interests: ['culture', 'social', 'music', 'food', 'art'],
-          interests_tags: ['culture', 'social', 'music', 'food', 'art'],
+          local_event_interests: shuffled,
+          interests_tags: shuffled,
         },
       };
 
@@ -143,16 +147,40 @@ export default function ExplorePage() {
       <div className="min-h-screen bg-white text-black flex flex-col">
         <DashboardHeader />
         <div className="flex-1 flex flex-col items-center justify-center px-6">
-          <div className="space-y-6 text-center max-w-md">
-            <div className="mx-auto h-1 w-32 rounded-full bg-gray-200 overflow-hidden">
-              <div className="h-full bg-black rounded-full animate-pulse" style={{ width: '60%' }} />
+          <div className="max-w-sm w-full space-y-10 text-center">
+            {city && (
+              <p className="text-xs font-semibold uppercase tracking-widest text-gray-400">
+                {city}
+              </p>
+            )}
+
+            <div className="space-y-3">
+              <div className="relative h-0.5 w-full bg-gray-100 rounded-full overflow-hidden">
+                <div className="absolute inset-0 bg-black rounded-full animate-search-bar" />
+              </div>
             </div>
-            <p className="text-lg text-gray-500 font-light">
-              {detectingLocation ? 'Finding out where you are...' : searchPhase}
-            </p>
-            {city && <p className="text-sm text-gray-400">{city}</p>}
+
+            <div className="space-y-2">
+              <p className="text-xl font-light text-gray-800">
+                {detectingLocation ? 'Locating you...' : searchPhase}
+              </p>
+              <p className="text-xs text-gray-400">
+                This takes 10–20 seconds — we're searching real venues
+              </p>
+            </div>
           </div>
         </div>
+
+        <style jsx>{`
+          @keyframes searchBar {
+            0% { transform: translateX(-100%); width: 40%; }
+            50% { transform: translateX(60%); width: 60%; }
+            100% { transform: translateX(-100%); width: 40%; }
+          }
+          .animate-search-bar {
+            animation: searchBar 2s ease-in-out infinite;
+          }
+        `}</style>
       </div>
     );
   }
