@@ -79,6 +79,12 @@ export default function LandingHero() {
           <p className="text-xs text-gray-300 max-w-xs mx-auto">
             We read your calendar to understand your vibe. Nothing is stored on our servers.
           </p>
+
+          <div className="flex items-center justify-center gap-4 text-xs text-gray-300">
+            <a href="/privacy" className="hover:text-black transition-colors">Privacy Policy</a>
+            <span>·</span>
+            <a href="/terms" className="hover:text-black transition-colors">Terms of Service</a>
+          </div>
         </div>
       </div>
     </div>
