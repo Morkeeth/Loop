@@ -2,12 +2,20 @@ import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import fs from 'fs';
 import path from 'path';
+import { rateLimit } from '@/lib/rate-limit';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
 export async function POST(request: NextRequest) {
+  // Rate limit: 5 persona builds per minute per IP
+  const ip = request.headers.get('x-forwarded-for')?.split(',')[0] || 'unknown';
+  const limit = rateLimit(ip, { maxRequests: 5, windowMs: 60_000 });
+  if (!limit.ok) {
+    return NextResponse.json({ error: 'Too many requests. Try again in a minute.' }, { status: 429 });
+  }
+
   try {
     const { calendarData } = await request.json();
 

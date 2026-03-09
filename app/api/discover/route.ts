@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import Anthropic from '@anthropic-ai/sdk';
+import { rateLimit } from '@/lib/rate-limit';
 
 function buildPrompt(city: string, dateRange: string, persona: any) {
   const profile = persona.profile || {};
@@ -127,6 +128,13 @@ async function discoverWithPerplexity(prompt: string, apiKey: string, model: str
 }
 
 export async function POST(request: NextRequest) {
+  // Rate limit: 5 discover calls per minute per IP (this is the expensive one)
+  const ip = request.headers.get('x-forwarded-for')?.split(',')[0] || 'unknown';
+  const limit = rateLimit(ip, { maxRequests: 5, windowMs: 60_000 });
+  if (!limit.ok) {
+    return NextResponse.json({ error: 'Too many requests. Try again in a minute.' }, { status: 429 });
+  }
+
   try {
     const body = await request.json();
     const { persona, provider, apiKey: userApiKey, model: userModel } = body;
