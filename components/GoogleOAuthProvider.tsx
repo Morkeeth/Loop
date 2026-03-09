@@ -9,18 +9,12 @@ interface GoogleOAuthProviderWrapperProps {
 export default function GoogleOAuthProviderWrapper({ children }: GoogleOAuthProviderWrapperProps) {
   const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
 
-  console.log('GoogleOAuthProviderWrapper - clientId:', clientId);
-  console.log('GoogleOAuthProviderWrapper - all env vars:', Object.keys(process.env).filter(key => key.includes('GOOGLE')));
-
   if (!clientId) {
-    console.warn('Google Client ID not found. Please set NEXT_PUBLIC_GOOGLE_CLIENT_ID in your environment variables.');
     return <>{children}</>;
   }
 
   return (
-    <GoogleOAuthProvider 
-      clientId={clientId}
-    >
+    <GoogleOAuthProvider clientId={clientId}>
       {children}
     </GoogleOAuthProvider>
   );

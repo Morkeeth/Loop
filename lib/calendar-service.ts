@@ -128,7 +128,6 @@ Rules:
 
       return [];
     } catch (error) {
-      console.error('Realtime insight generation failed:', error);
       return [];
     }
   }
@@ -202,7 +201,6 @@ Rules:
       const data = await response.json();
       return data.items || [];
     } catch (error) {
-      console.error('Error fetching calendar list:', error);
       throw error;
     }
   }
@@ -250,10 +248,10 @@ Rules:
             }));
             allEvents.push(...eventsWithCalendar);
           } else {
-            console.warn(`Failed to fetch events from calendar ${calendar.id}: ${response.status}`);
+            // Skip failed calendar silently
           }
         } catch (error) {
-          console.warn(`Error fetching events from calendar ${calendar.id}:`, error);
+          // Continue with other calendars
           // Continue with other calendars even if one fails
         }
       }
@@ -265,7 +263,6 @@ Rules:
         return new Date(aStart).getTime() - new Date(bStart).getTime();
       });
     } catch (error) {
-      console.error('Error fetching calendar events:', error);
       throw error;
     }
   }
@@ -414,7 +411,6 @@ Rules:
 
       return await response.json();
     } catch (error) {
-      console.error('Error creating calendar event:', error);
       throw error;
     }
   }
@@ -463,10 +459,10 @@ Rules:
             }));
             allEvents.push(...eventsWithCalendar);
           } else {
-            console.warn(`Failed to fetch events from calendar ${calendar.id}: ${response.status}`);
+            // Skip failed calendar silently
           }
         } catch (error) {
-          console.warn(`Error fetching events from calendar ${calendar.id}:`, error);
+          // Continue with other calendars
           // Continue with other calendars even if one fails
         }
       }
@@ -495,7 +491,6 @@ Rules:
         trends,
       };
     } catch (error) {
-      console.error('Error fetching calendar trends:', error);
       throw error;
     }
   }

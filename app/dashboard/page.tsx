@@ -1,1412 +1,576 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState, Suspense } from 'react';
+import { useCallback, useEffect, useRef, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import NumberFlow from '@number-flow/react';
 
-type StepStatus = 'pending' | 'active' | 'complete' | 'error';
+import { DashboardHeader } from '@/components/DashboardHeader';
+import {
+  getCachedPersona, setCachedPersona,
+  getCachedDiscover, setCachedDiscover, clearDiscoverCache,
+} from '@/lib/cache';
+import { categorizeEvents, scoreArchetypes } from '@/lib/archetypes';
+import type { Archetype } from '@/lib/archetypes';
+import type { CalendarPayload, DiscoveredEvent } from '@/lib/pipeline-types';
 
-// Custom component for animated text transitions using NumberFlow
-function AnimatedText({ 
-  text, 
-  isActive, 
-  className = '' 
-}: { 
-  text: string; 
-  isActive: boolean; 
-  className?: string; 
-}) {
-  const [currentText, setCurrentText] = useState(text);
-  const [isAnimating, setIsAnimating] = useState(false);
-  
-  useEffect(() => {
-    if (isActive && text !== currentText) {
-      setIsAnimating(true);
-      
-      // Fade out current text
-      setTimeout(() => {
-        setCurrentText(text);
-        // Fade in new text
-        setTimeout(() => {
-          setIsAnimating(false);
-        }, 50);
-      }, 250);
-    } else if (isActive) {
-      setCurrentText(text);
-    }
-  }, [text, isActive, currentText]);
-  
-  if (isActive) {
-    return (
-      <div 
-        className={`gradient-text ${className}`}
-        style={{
-          opacity: isAnimating ? 0 : 1,
-          transition: 'opacity 0.25s ease-in-out',
-          color: '#ffffff'
-        }}
-      >
-        {currentText}
-      </div>
-    );
-  }
-  
-  return <div className={className}>{text}</div>;
-}
-type PipelineStepId = 'calendar' | 'persona' | 'digest' | 'audio' | 'agent' | 'event' | 'suggest';
-
-interface PipelineStep {
-  id: PipelineStepId;
-  title: string;
-  description: string;
-  status: StepStatus;
-  error?: string | null;
-}
-
-const PIPELINE_TEMPLATE: Array<Omit<PipelineStep, 'status' | 'error'>> = [
-  {
-    id: 'calendar',
-    title: 'Load calendar events',
-    description: 'Pulling the last six months from Google Calendar',
-  },
-  {
-    id: 'persona',
-    title: 'Create Persona',
-    description: 'Summarising your rhythms, rituals, and working style with GPT-4o',
-  },
-  {
-    id: 'digest',
-    title: 'Write Weekly Digest',
-    description: 'Weaving your recent storyline with GPT-5',
-  },
-  {
-    id: 'audio',
-    title: 'Generate Audio',
-    description: "Creating Marcel's voice with ElevenLabs",
-  },
-  {
-    id: 'agent',
-    title: 'Create AI Agent',
-    description: 'Creating Marcel AI assistant with Beyond Presence',
-  },
-  {
-    id: 'event',
-    title: 'Schedule Digest Session',
-    description: 'Dropping everything into next Sunday with audio and agent links ready',
-  },
-  {
-    id: 'suggest',
-    title: 'Suggest Events',
-    description: 'Generating personalized event suggestions for the next 4 weeks',
-  },
+const SEARCH_MESSAGES = [
+  'Searching niche venues...',
+  'Checking pop-ups and one-offs...',
+  'Filtering for something special...',
+  'Almost there...',
 ];
-
-const STEP_DESCRIPTIONS: Record<PipelineStepId, string[]> = {
-  calendar: [
-    'Pulling the last six months from Google Calendar',
-    'Analyzing your event patterns',
-    'Counting meetings, calls, and appointments',
-    'Mapping your schedule rhythms',
-    'Synced with Google Calendar API',
-  ],
-  persona: [
-    'Summarising your rhythms, rituals, and working style',
-    'Detecting your work patterns and preferences',
-    'Understanding your meeting habits',
-    'Building your unique profile',
-    'Generated with GPT-4o',
-  ],
-  digest: [
-    'Weaving your recent storyline with GPT-5',
-    'Connecting the dots in your calendar',
-    'Finding narrative threads in your events',
-    'Crafting your weekly story',
-    'Written with GPT-5 Responses API',
-  ],
-  audio: [
-    "Generating Marcel's voice with ElevenLabs",
-    'Converting text to speech',
-    'Adding French accent warmth',
-    'Optimizing audio quality',
-    'Generated with ElevenLabs v3',
-  ],
-  agent: [
-    'Creating Marcel AI assistant with Beyond Presence',
-    'Configuring personal assistant capabilities',
-    'Setting up conversational AI with persona data',
-    'Generating unique agent URL',
-    'Ready for interactive conversations',
-  ],
-  suggest: [
-    'Analyzing your calendar patterns and interests',
-    'Finding free time slots in the next 4 weeks',
-    'Generating diverse event suggestions',
-    'Mixing public events, social activities, and personal activities',
-    'Generated with GPT-5',
-  ],
-  event: [
-    'Dropping everything into next Sunday with audio and agent links ready',
-    'Calculating next Sunday at 3 PM',
-    'Formatting the digest for calendar',
-    'Adding audio and agent links to description',
-    'Scheduled via Google Calendar API',
-  ],
-};
-
-const createInitialSteps = (): PipelineStep[] =>
-  PIPELINE_TEMPLATE.map((step) => ({
-    ...step,
-    status: 'pending',
-    error: null,
-  }));
-
-interface CalendarPayload {
-  success: boolean;
-  events: any[];
-  minified: any[];
-  insights: string[];
-  timeframe: { start: string; end: string } | null;
-  count: number;
-  monthsBack: number;
-}
-
-interface DigestResult {
-  content: string;
-  digestId: string;
-  audioUrl: string;
-}
-
-interface AudioGenerationResult {
-  audioUrl: string;
-  digestId: string;
-}
 
 function Dashboard() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const [accessToken, setAccessToken] = useState<string | null>(null);
-  const [userEmail, setUserEmail] = useState<string | null>(null);
-  const [userName, setUserName] = useState<string | null>(null);
-  const [authError, setAuthError] = useState<string | null>(null);
+  const [authenticated, setAuthenticated] = useState(false);
+  const [authChecked, setAuthChecked] = useState(false);
 
-  const [steps, setSteps] = useState<PipelineStep[]>(() => createInitialSteps());
-  const [calendarPayload, setCalendarPayload] = useState<CalendarPayload | null>(null);
+  type Phase = 'init' | 'scanning' | 'persona' | 'searching' | 'reveal' | 'error';
+  const [phase, setPhase] = useState<Phase>('init');
+  const [loadingMessage, setLoadingMessage] = useState('');
+
+  // Scanning animation state
+  const [scannedEvents, setScannedEvents] = useState<string[]>([]);
+  const [eventCount, setEventCount] = useState(0);
+  const [archetypes, setArchetypes] = useState<Archetype[]>([]);
+  const [scanComplete, setScanComplete] = useState(false);
+
+  // Data
   const [persona, setPersona] = useState<any | null>(null);
-  const [digestResult, setDigestResult] = useState<DigestResult | null>(null);
-  const [audioDataUrl, setAudioDataUrl] = useState<string | null>(null);
-  const [agentData, setAgentData] = useState<{agentId: string, agentUrl: string} | null>(null);
-  const [recommendations, setRecommendations] = useState<any | null>(null);
+  const [editedTags, setEditedTags] = useState<string[]>([]);
+  const [editedCity, setEditedCity] = useState('');
+  const [newTag, setNewTag] = useState('');
+  const [discoveredEvent, setDiscoveredEvent] = useState<DiscoveredEvent | null>(null);
   const [calendarEvent, setCalendarEvent] = useState<any | null>(null);
-
-  const [isRunning, setIsRunning] = useState(false);
-  const [pipelineError, setPipelineError] = useState<string | null>(null);
-  const [hasRun, setHasRun] = useState(false);
-
-  const [activeStepDescriptions, setActiveStepDescriptions] = useState<Record<PipelineStepId, number>>({
-    calendar: 0,
-    persona: 0,
-    digest: 0,
-    audio: 0,
-    agent: 0,
-    suggest: 0,
-    event: 0,
-  });
-
-  const [expandedSteps, setExpandedSteps] = useState<Set<PipelineStepId>>(new Set());
+  const [errorMessage, setErrorMessage] = useState('');
 
   const isRunningRef = useRef(false);
+  const hasRunRef = useRef(false);
 
   const retryWithBackoff = useCallback(async (fn: () => Promise<any>, maxRetries = 3) => {
     for (let attempt = 0; attempt < maxRetries; attempt++) {
-      try {
-        return await fn();
-      } catch (error) {
-        if (error instanceof Error && 
-            (error.message.includes('429') || error.message.includes('Rate limit'))) {
-          if (attempt < maxRetries - 1) {
-            const delay = Math.pow(2, attempt) * 1000; // Exponential backoff: 1s, 2s, 4s
-            console.log(`Rate limit hit, retrying in ${delay}ms...`);
-            await new Promise(resolve => setTimeout(resolve, delay));
-            continue;
-          }
+      try { return await fn(); }
+      catch (error) {
+        if (error instanceof Error && (error.message.includes('429') || error.message.includes('Rate limit')) && attempt < maxRetries - 1) {
+          await new Promise(r => setTimeout(r, Math.pow(2, attempt) * 1000));
+          continue;
         }
         throw error;
       }
     }
   }, []);
 
-  const toggleStepExpansion = useCallback((stepId: PipelineStepId) => {
-    setExpandedSteps(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(stepId)) {
-        newSet.delete(stepId);
-      } else {
-        newSet.add(stepId);
-      }
-      return newSet;
-    });
-  }, []);
-
-  // Universal content renderer that safely handles any data type
-  const renderSafeContent = useCallback((data: any, title: string, maxHeight = 'max-h-64') => {
-    if (!data) return null;
-
-    return (
-      <div className="mt-4 p-4 bg-gray-50 rounded-lg w-full">
-        <h4 className="font-semibold mb-2">{title}</h4>
-        <div className={`text-sm bg-white p-3 rounded border ${maxHeight} overflow-auto w-full`}>
-          {typeof data === 'string' ? (
-            <div className="whitespace-pre-wrap">{data}</div>
-          ) : Array.isArray(data) ? (
-            <div className="space-y-2">
-              {data.map((item, index) => (
-                <div key={index} className="p-2 bg-gray-50 rounded">
-                  {typeof item === 'string' ? (
-                    <div className="whitespace-pre-wrap">{item}</div>
-                  ) : (
-                    <pre className="text-xs">{JSON.stringify(item, null, 2)}</pre>
-                  )}
-                </div>
-              ))}
-            </div>
-          ) : typeof data === 'object' ? (
-            <div className="space-y-3">
-              {Object.entries(data).map(([key, value]) => (
-                <div key={key}>
-                  <h5 className="font-medium text-gray-800 capitalize mb-1">
-                    {key.replace(/_/g, ' ')}
-                  </h5>
-                  <div className="text-sm text-gray-700 bg-gray-50 p-2 rounded">
-                    {typeof value === 'string' ? (
-                      <div className="whitespace-pre-wrap">{value}</div>
-                    ) : typeof value === 'object' ? (
-                      <pre className="text-xs">{JSON.stringify(value, null, 2)}</pre>
-                    ) : (
-                      <span>{String(value)}</span>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <span>{String(data)}</span>
-          )}
-        </div>
-      </div>
-    );
-  }, []);
-
-  const renderStepContent = useCallback((stepId: PipelineStepId) => {
-    switch (stepId) {
-      case 'calendar':
-        return renderSafeContent(
-          calendarPayload,
-          `Calendar Events (${Array.isArray(calendarPayload) ? calendarPayload.length : 'Data loaded'})`
-        );
-      
-      case 'persona':
-        return renderSafeContent(persona, 'Generated Persona');
-      
-      case 'digest':
-        return renderSafeContent(digestResult, 'Weekly Digest');
-      
-      case 'audio':
-        return audioDataUrl ? (
-          <div className="mt-4 p-4 bg-gray-50 rounded-lg w-full">
-            <h4 className="font-semibold mb-2">Audio Digest</h4>
-            <audio controls className="w-full">
-              <source src={audioDataUrl} type="audio/mpeg" />
-              Your browser does not support the audio element.
-            </audio>
-            <p className="text-xs text-gray-600 mt-2">Generated with ElevenLabs v3</p>
-          </div>
-        ) : null;
-      
-      case 'agent':
-        console.log('Rendering agent case, agentData:', agentData);
-        return agentData ? (
-          <div className="mt-4 p-4 bg-gray-50 rounded-lg w-full">
-            <h4 className="font-semibold mb-2">Marcel AI Assistant</h4>
-            <div className="mb-4">
-              <iframe
-                src={agentData.agentUrl}
-                style={{ 
-                  width: '100%', 
-                  height: '400px', 
-                  border: 'none', 
-                  borderRadius: '8px',
-                  backgroundColor: '#f9fafb'
-                }}
-                allow="camera; microphone; fullscreen"
-                allowFullScreen
-                title="Marcel AI Assistant"
-              />
-            </div>
-            <p className="text-xs text-gray-600 mb-2">Interactive AI assistant powered by Beyond Presence</p>
-            <div className="mt-2">
-              <a 
-                href={agentData.agentUrl} 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="text-blue-600 hover:text-blue-800 text-sm underline"
-              >
-                Open Marcel in new tab
-              </a>
-            </div>
-          </div>
-        ) : (
-          <div className="mt-4 p-4 bg-gray-50 rounded-lg w-full">
-            <p className="text-gray-500">Agent not available yet...</p>
-          </div>
-        );
-      
-      case 'suggest':
-        return recommendations && recommendations.recommendations ? (
-          <div className="mt-4 p-4 bg-gray-50 rounded-lg w-full">
-            <h4 className="font-semibold mb-3">Exceptional Event Recommendations</h4>
-            <p className="text-xs text-gray-600 mb-3">
-              Found {recommendations.metadata?.total_recommendations || 0} high-quality events
-            </p>
-            <div className="space-y-3 max-h-96 overflow-y-auto">
-              {recommendations.recommendations?.map((week: any, weekIndex: number) => (
-                <div key={weekIndex} className="border rounded-lg p-3 bg-white">
-                  <h5 className="font-medium text-sm text-gray-700 mb-2">
-                    Week of {new Date(week.week_start_date).toLocaleDateString()}
-                  </h5>
-                  <div className="space-y-2">
-                    {week.recommendations?.map((rec: any, recIndex: number) => (
-                      <div key={recIndex} className={`flex justify-between items-start p-2 rounded ${
-                        rec.is_placeholder ? 'bg-yellow-50 border border-yellow-200' : 'bg-gray-50'
-                      }`}>
-                        <div className="flex-1">
-                          <h6 className={`font-medium text-sm ${
-                            rec.is_placeholder ? 'text-yellow-800' : ''
-                          }`}>
-                            {rec.title}
-                            {rec.is_placeholder && (
-                              <span className="ml-2 text-xs bg-yellow-200 text-yellow-800 px-2 py-1 rounded">
-                                PLACEHOLDER
-                              </span>
-                            )}
-                          </h6>
-                          <p className="text-xs text-gray-600 mt-1">{rec.description}</p>
-                          {rec.is_placeholder && (
-                            <p className="text-xs text-yellow-700 mt-1 font-medium">
-                              ⚠️ {rec.conflict_reason === 'conflicts_with_existing_event' 
-                                ? 'Conflicts with existing calendar event' 
-                                : 'Does not fit in available free time slot'}
-                            </p>
-                          )}
-                          <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
-                            <span>📅 {rec.date} at {rec.start_time}</span>
-                            <span>📍 {rec.location}</span>
-                            <span>💰 {rec.cost}</span>
-                            <span className={`px-2 py-1 rounded text-xs ${
-                              rec.category === 'professional' ? 'bg-blue-100 text-blue-800' :
-                              rec.category === 'social' ? 'bg-green-100 text-green-800' :
-                              rec.category === 'cultural' ? 'bg-purple-100 text-purple-800' :
-                              rec.category === 'fitness' ? 'bg-orange-100 text-orange-800' :
-                              'bg-gray-100 text-gray-800'
-                            }`}>
-                              {rec.category}
-                            </span>
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <div className="text-xs text-gray-500 mb-1">
-                            Relevance: {Math.round(rec.relevance_score * 100)}%
-                          </div>
-                          <a 
-                            href={rec.source_url} 
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                            className="text-xs text-blue-600 hover:text-blue-800"
-                          >
-                            View Event →
-                          </a>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div className="mt-3 text-xs text-gray-500">
-              <p>Confidence: {Math.round((recommendations.metadata?.confidence_score || 0) * 100)}%</p>
-              {recommendations.metadata?.caveats?.length > 0 && (
-                <p>Caveats: {recommendations.metadata.caveats.join(', ')}</p>
-              )}
-            </div>
-          </div>
-        ) : null;
-      
-      case 'event':
-        return renderSafeContent(calendarEvent, 'Calendar Event Created');
-      
-      default:
-        return null;
-    }
-  }, [calendarPayload, persona, digestResult, audioDataUrl, calendarEvent, renderSafeContent]);
-
+  // --- Auth check via cookie ---
   useEffect(() => {
-    const token = searchParams.get('access_token');
-    const userEmailParam = searchParams.get('user_email');
-    const userNameParam = searchParams.get('user_name');
-    const authErrorParam = searchParams.get('error');
-
-    if (authErrorParam) {
-      setAuthError(`Authentication failed: ${authErrorParam}`);
+    const errorParam = searchParams.get('error');
+    if (errorParam) {
+      setErrorMessage(`Authentication failed: ${errorParam}`);
+      setPhase('error');
+      setAuthChecked(true);
       return;
     }
 
-    if (token) {
-      setAuthError(null);
-      setAccessToken(token);
-      setUserEmail(userEmailParam);
-      setUserName(userNameParam);
-      setHasRun(false);
-
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('accessToken', token);
-        if (userEmailParam) {
-          localStorage.setItem('userEmail', userEmailParam);
+    fetch('/api/auth/session')
+      .then(res => {
+        if (res.ok) {
+          setAuthenticated(true);
+        } else {
+          router.push('/');
         }
-        if (userNameParam) {
-          localStorage.setItem('userName', userNameParam);
-        }
-
-      const cleanUrl = new URL(window.location.href);
-      cleanUrl.searchParams.delete('access_token');
-      cleanUrl.searchParams.delete('refresh_token');
-      cleanUrl.searchParams.delete('user_email');
-      cleanUrl.searchParams.delete('user_name');
-      window.history.replaceState({}, '', cleanUrl.toString());
-      }
-
-      return;
-    }
-
-    if (typeof window !== 'undefined') {
-      const storedToken = localStorage.getItem('accessToken');
-      if (storedToken) {
-        setAuthError(null);
-        setAccessToken(storedToken);
-        setUserEmail(localStorage.getItem('userEmail'));
-        setUserName(localStorage.getItem('userName'));
-        setHasRun(false);
-      } else {
-        router.push('/');
-      }
-    }
+      })
+      .catch(() => router.push('/'))
+      .finally(() => setAuthChecked(true));
   }, [searchParams, router]);
 
-  const executeStep = useCallback(async <T,>(stepId: PipelineStepId, action: () => Promise<T>): Promise<T> => {
-    setSteps((prev) =>
-      prev.map((step) =>
-        step.id === stepId
-          ? {
-              ...step,
-              status: 'active',
-              error: null,
-            }
-          : step
-      )
-    );
+  // --- Animate scanning events ---
+  const animateScan = useCallback((events: any[]) => {
+    return new Promise<void>((resolve) => {
+      const titles = events
+        .map((e: any) => e.s || e.summary || '')
+        .filter(Boolean)
+        .slice(0, 60);
 
-    // Start description animation for this step
-    const descriptions = STEP_DESCRIPTIONS[stepId];
-    if (!descriptions || descriptions.length === 0) {
-      console.warn(`No descriptions found for step: ${stepId}`);
-      return await action();
-    }
-    
-    let descriptionIndex = 0;
-    
-    const descriptionInterval = setInterval(() => {
-      setActiveStepDescriptions(prev => ({
-        ...(prev || {}),
-        [stepId]: descriptionIndex
-      }));
-      descriptionIndex = (descriptionIndex + 1) % descriptions.length;
-    }, 2000);
+      setEventCount(events.length);
+      let i = 0;
 
-    try {
-      const result = await action();
-
-      clearInterval(descriptionInterval);
-      
-      setSteps((prev) =>
-        prev.map((step) =>
-          step.id === stepId
-            ? {
-                ...step,
-                status: 'complete',
-              }
-            : step
-        )
-      );
-
-      return result;
-    } catch (error) {
-      clearInterval(descriptionInterval);
-      
-      let errorMessage = 'Something went wrong';
-      if (error instanceof Error) {
-        if (error.message.includes('429') || error.message.includes('Rate limit')) {
-          errorMessage = 'Rate limit reached. Please wait a moment and try again.';
-        } else if (error.message.includes('401') || error.message.includes('Unauthorized')) {
-          errorMessage = 'Authentication failed. Please reconnect with Google.';
-        } else if (error.message.includes('500') || error.message.includes('Internal Server Error')) {
-          errorMessage = 'Server error. Please try again.';
+      const interval = setInterval(() => {
+        if (i < titles.length) {
+          setScannedEvents(prev => [...prev.slice(-4), titles[i]]);
+          i++;
         } else {
-          errorMessage = error.message;
+          clearInterval(interval);
+          resolve();
         }
-      }
-
-      setSteps((prev) =>
-        prev.map((step) =>
-          step.id === stepId
-            ? {
-                ...step,
-                status: 'error',
-                error: errorMessage,
-              }
-            : step
-        )
-      );
-
-      throw error;
-    }
-  }, []);
-
-  const buildEventDescription = useCallback((content: string, audioPageUrl: string, agentUrl?: string, agentId?: string) => {
-    const absoluteAudioUrl =
-      typeof window !== 'undefined'
-        ? audioPageUrl.startsWith('http')
-          ? audioPageUrl
-          : `${window.location.origin}${audioPageUrl}`
-        : audioPageUrl;
-
-    let withAudioLink = content.includes('🎧 Listen To Your Digest:')
-      ? content.replace(
-          /🎧 Listen To Your Digest: (\/digest\/[^\s]+)/g,
-          `🎧 Listen To Your Digest: ${absoluteAudioUrl}`
-        )
-      : `🎧 Listen To Your Digest: ${absoluteAudioUrl}\n\n${content}`;
-
-    // Add agent link if available (with fallback to build from agentId)
-    const finalAgentUrl = agentUrl || (agentId ? `https://bey.chat/${agentId}` : null);
-    if (finalAgentUrl) {
-      withAudioLink = `🤖 Chat with Marcel: ${finalAgentUrl}\n\n${withAudioLink}`;
-    }
-
-    return withAudioLink.replace(/https?:\/\/[^\s]+/g, (url) => {
-      try {
-        const domain = new URL(url).hostname.replace('www.', '');
-        return `${domain}: ${url}`;
-      } catch {
-        return url;
-      }
+      }, 80);
     });
   }, []);
 
-  const runPipeline = useCallback(async () => {
-    if (!accessToken) {
-      return;
-    }
+  // --- Build persona ---
+  const buildPersona = useCallback(async (force = false) => {
+    if (!authenticated || isRunningRef.current) return;
 
-    if (isRunningRef.current) {
-      return;
+    // Check full cache
+    if (!force) {
+      const cachedP = getCachedPersona();
+      const cachedD = getCachedDiscover();
+      if (cachedD && cachedP) {
+        setPersona(cachedP);
+        setDiscoveredEvent(cachedD.event);
+        setCalendarEvent(cachedD.calendarEvent || null);
+        setupEditableFields(cachedP);
+        if (cachedP._archetypes) setArchetypes(cachedP._archetypes);
+        setPhase('reveal');
+        return;
+      }
+      if (cachedP) {
+        setPersona(cachedP);
+        setupEditableFields(cachedP);
+        if (cachedP._archetypes) setArchetypes(cachedP._archetypes);
+        setPhase('persona');
+        return;
+      }
     }
 
     isRunningRef.current = true;
-    setIsRunning(true);
-    setPipelineError(null);
-    setSteps(createInitialSteps());
-    setCalendarPayload(null);
-    setPersona(null);
-    setDigestResult(null);
-    setAudioDataUrl(null);
-    setCalendarEvent(null);
+    setPhase('scanning');
+    setScannedEvents([]);
+    setScanComplete(false);
+    setArchetypes([]);
 
     try {
-      const calendar = await executeStep('calendar', async () => {
-      const response = await fetch(
-        `/api/calendar?accessToken=${encodeURIComponent(accessToken)}&monthsBack=6&insights=true`
-      );
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-
-        if (response.status === 401 || response.status === 403) {
-            if (typeof window !== 'undefined') {
-          localStorage.removeItem('accessToken');
-          localStorage.removeItem('userEmail');
-          localStorage.removeItem('userName');
-            }
-
-            router.push('/');
-          }
-
-          throw new Error(errorData.message || errorData.error || `Failed to fetch calendar (${response.status})`);
+      // Fetch calendar — token is in the cookie, server reads it automatically
+      const calRes = await fetch('/api/calendar?monthsBack=6&insights=true');
+      if (!calRes.ok) {
+        if (calRes.status === 401 || calRes.status === 403) {
+          router.push('/');
+          return;
         }
-
-        const payload: CalendarPayload = await response.json();
-        setCalendarPayload(payload);
-        return payload;
-      });
-
-      const personaData = await executeStep('persona', async () => {
-        if (!calendar.minified?.length) {
-          throw new Error('No calendar events available to build a persona yet.');
-        }
-
-        return await retryWithBackoff(async () => {
-      const response = await fetch('/api/persona', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          calendarData: {
-            now_iso: new Date().toISOString(),
-            default_timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-            calendars: [{ id: 'primary', summary: 'Primary Calendar' }],
-                events: calendar.minified,
-          },
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || errorData.details || 'Failed to generate persona');
+        const err = await calRes.json().catch(() => ({}));
+        throw new Error(err.error || `Calendar error (${calRes.status})`);
       }
+      const calendar: CalendarPayload = await calRes.json();
+      if (!calendar.minified?.length) throw new Error('No calendar events found.');
 
-          return await response.json();
-        });
-      });
+      // Animate scanning + categorize locally
+      await animateScan(calendar.minified);
+      const signals = categorizeEvents(calendar.minified);
+      const scored = scoreArchetypes(signals);
+      setArchetypes(scored);
+      setScanComplete(true);
 
-      setPersona(personaData);
+      // Pause to let user see archetypes
+      await new Promise(r => setTimeout(r, 1500));
 
-          // Generate digest first
-      const digest = await executeStep('digest', async () => {
-        const response = await fetch('/api/digest', {
+      // Build AI persona
+      const personaData = await retryWithBackoff(async () => {
+        const res = await fetch('/api/persona', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            personaText: JSON.stringify(personaData, null, 2),
-            recentCalendarJson: JSON.stringify(calendar.minified, null, 2),
-            promptTemplate:
-              'Run the Sunday digest.\n\nPersona description:\n{{persona_text}}\n\nRecent Calendar JSON:\n{{recent_calendar_json}}',
+            calendarData: {
+              now_iso: new Date().toISOString(),
+              default_timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+              calendars: [{ id: 'primary', summary: 'Primary Calendar' }],
+              events: calendar.minified,
+            },
           }),
         });
-
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-          throw new Error(errorData.error || errorData.details || 'Failed to generate digest');
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || err.details || 'Failed to build persona');
         }
-
-        const digestPayload: DigestResult = await response.json();
-        setDigestResult(digestPayload);
-        return digestPayload;
+        return res.json();
       });
 
-      // Start audio and agent in parallel after digest is complete
-      const [audioResult, agentResult] = await Promise.all([
-        executeStep('audio', async () => {
-          const response = await fetch('/api/digest/audio/generate', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              digestId: digest.digestId,
-              content: digest.content,
-            }),
-          });
+      personaData._archetypes = scored;
+      setPersona(personaData);
+      setCachedPersona(personaData);
+      setupEditableFields(personaData);
+      setPhase('persona');
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Something went wrong');
+      setPhase('error');
+    } finally {
+      isRunningRef.current = false;
+    }
+  }, [authenticated, router, retryWithBackoff, animateScan]);
 
-          if (!response.ok) {
-            const errorData = await response.json().catch(() => ({}));
-            throw new Error(errorData.error || 'Failed to generate audio');
-          }
+  function setupEditableFields(p: any) {
+    setEditedCity(p.profile?.home_base?.city || '');
+    setEditedTags([
+      ...(p.profile?.interests_tags || []),
+      ...(p.profile?.fitness_tags || []),
+      ...(p.profile?.local_event_interests || []),
+    ].filter((v: string, i: number, a: string[]) => a.indexOf(v) === i));
+  }
 
-          const audioPayload: AudioGenerationResult = await response.json();
-          setAudioDataUrl(audioPayload.audioUrl);
-          return audioPayload;
-        }),
-        
-        executeStep('agent', async () => {
-          const response = await fetch('/api/digest/agent/create', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-              digestId: digest.digestId,
-              digestContent: digest.content,
-              persona: personaData,
-              calendarData: calendar.minified,
-        }),
-      });
+  // --- Find event ---
+  const findEvent = useCallback(async () => {
+    if (isRunningRef.current) return;
+    isRunningRef.current = true;
+    setPhase('searching');
+    clearDiscoverCache();
 
-      if (!response.ok) {
-            const errorData = await response.json().catch(() => ({}));
-            console.warn('Agent creation failed:', errorData.error);
-            // Don't throw error for agent failure, just return null
-            return null;
-          }
+    let msgIndex = 0;
+    setLoadingMessage(SEARCH_MESSAGES[0]);
+    const msgInterval = setInterval(() => {
+      msgIndex = Math.min(msgIndex + 1, SEARCH_MESSAGES.length - 1);
+      setLoadingMessage(SEARCH_MESSAGES[msgIndex]);
+    }, 3500);
 
-          const agentPayload = await response.json();
-          console.log('Agent created successfully:', agentPayload);
-          setAgentData({ agentId: agentPayload.agentId, agentUrl: agentPayload.agentUrl });
-          console.log('Agent data set:', { agentId: agentPayload.agentId, agentUrl: agentPayload.agentUrl });
-          return agentPayload;
-        })
-      ]);
-
-      // Schedule digest session immediately after audio and agent are done
-      await executeStep('event', async () => {
-        const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-      const now = new Date();
-      const daysUntilSunday = (7 - now.getDay()) % 7;
-      const nextSunday = new Date(now);
-      nextSunday.setDate(now.getDate() + (daysUntilSunday === 0 ? 7 : daysUntilSunday));
-      nextSunday.setHours(15, 0, 0, 0);
-
-        // Use immediately returned agentResult to avoid state timing issues
-        const description = buildEventDescription(
-          digest.content,
-          digest.audioUrl,
-          (agentResult && 'agentUrl' in (agentResult as any)) ? (agentResult as any).agentUrl : agentData?.agentUrl,
-          (agentResult && 'agentId' in (agentResult as any)) ? (agentResult as any).agentId : agentData?.agentId
-        );
-
-      const eventData = {
-        summary: 'Circling Back',
-        location: 'by Loop',
-          description,
-        start: {
-          dateTime: nextSunday.toISOString(),
-            timeZone: timezone,
-        },
-        end: {
-            dateTime: new Date(nextSunday.getTime() + 60 * 60 * 1000).toISOString(),
-            timeZone: timezone,
+    try {
+      const tweakedPersona = {
+        ...persona,
+        profile: {
+          ...(persona?.profile || {}),
+          home_base: { city: editedCity, country: persona?.profile?.home_base?.country || 'unknown' },
+          interests_tags: editedTags,
+          local_event_interests: editedTags,
         },
       };
 
-      const response = await fetch('/api/calendar', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          accessToken,
-          eventData,
-        }),
-      });
+      const modelConfig = typeof window !== 'undefined' ? {
+        provider: localStorage.getItem('loopModelProvider') || undefined,
+        apiKey: localStorage.getItem('loopModelApiKey') || undefined,
+        model: localStorage.getItem('loopModelName') || undefined,
+      } : {};
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || 'Failed to create calendar event');
-      }
-
-      const result = await response.json();
-        setCalendarEvent(result.event);
-        return result.event;
-      });
-
-      // Generate recommendations using GPT-5 with web search
-      await executeStep('suggest', async () => {
-        const response = await fetch('/api/recommendations', {
+      const discovered: DiscoveredEvent = await retryWithBackoff(async () => {
+        const res = await fetch('/api/discover', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ persona: tweakedPersona, ...modelConfig }),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || err.details || 'Failed to discover event');
+        }
+        return (await res.json()).event;
+      });
+      setDiscoveredEvent(discovered);
+
+      // Schedule on calendar (POST reads cookie for token)
+      try {
+        const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        const start = new Date(`${discovered.date}T${discovered.time}:00`);
+        const end = new Date(`${discovered.date}T${discovered.end_time || discovered.time}:00`);
+        if (end <= start) end.setTime(start.getTime() + 2 * 3600000);
+
+        const desc = [discovered.description, '', discovered.why_this, '', discovered.url ? `Details: ${discovered.url}` : '', '', 'Found by Loop'].filter(Boolean).join('\n');
+        const eventRes = await fetch('/api/calendar', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            persona: personaData,
-            calendarEvents: calendar.events,
-            userLocation: {
-              city: personaData.profile?.home_base?.city || 'San Francisco',
-              country: personaData.profile?.home_base?.country || 'US',
-              timezone: personaData.profile?.primary_timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
+            eventData: {
+              summary: discovered.event_title,
+              location: discovered.address || discovered.venue,
+              description: desc,
+              start: { dateTime: start.toISOString(), timeZone: tz },
+              end: { dateTime: end.toISOString(), timeZone: tz },
             },
-            currentDate: new Date().toISOString(),
           }),
         });
-
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-          console.warn('Recommendations generation failed:', errorData.error);
-          return { recommendations: [], metadata: { total_recommendations: 0 } };
+        if (eventRes.ok) {
+          const result = await eventRes.json();
+          setCalendarEvent(result.event);
+          setCachedDiscover(discovered, result.event);
         }
-
-        const recommendationsPayload = await response.json();
-        setRecommendations(recommendationsPayload);
-
-        // Automatically add all recommended events to calendar (excluding placeholders)
-        if (recommendationsPayload.recommendations && accessToken) {
-          try {
-            console.log('Automatically adding recommended events to calendar...');
-            
-            // Flatten all recommendations into a single array, excluding placeholders
-            const allEvents = recommendationsPayload.recommendations.flatMap((week: any) => 
-              week.recommendations?.filter((rec: any) => !rec.is_placeholder).map((rec: any) => ({
-                title: rec.title,
-                description: rec.description,
-                startTime: new Date(`${rec.date}T${rec.start_time}`).toISOString(),
-                endTime: new Date(`${rec.date}T${rec.end_time || rec.start_time}`).toISOString(),
-                location: rec.location,
-                category: rec.category,
-                source_url: rec.source_url,
-                relevance_score: rec.relevance_score,
-              })) || []
-            );
-
-            if (allEvents.length > 0) {
-              const addResponse = await fetch('/api/calendar/events', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  events: allEvents,
-                  accessToken,
-                }),
-              });
-
-              if (addResponse.ok) {
-                const addData = await addResponse.json();
-                console.log(`Successfully added ${addData.createdEvents || allEvents.length} recommended events to calendar`);
-              } else {
-                const errorData = await addResponse.json().catch(() => ({}));
-                console.warn('Failed to auto-add recommended events:', errorData.error);
-              }
-            } else {
-              console.log('No non-placeholder events to add to calendar');
-            }
-          } catch (error) {
-            console.warn('Error auto-adding recommended events:', error);
-          }
-        }
-
-        return recommendationsPayload;
-      });
+      } catch {
+        setCachedDiscover(discovered);
+      }
+      setPhase('reveal');
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Something went wrong while orchestrating the flow';
-      setPipelineError(message);
+      setErrorMessage(error instanceof Error ? error.message : 'Something went wrong');
+      setPhase('error');
     } finally {
-      setIsRunning(false);
+      clearInterval(msgInterval);
       isRunningRef.current = false;
     }
-  }, [accessToken, executeStep, buildEventDescription, router]);
+  }, [persona, editedCity, editedTags, retryWithBackoff]);
 
+  // Auto-start
   useEffect(() => {
-    if (!accessToken || hasRun) {
-      return;
-    }
+    if (!authenticated || !authChecked || hasRunRef.current) return;
+    hasRunRef.current = true;
+    buildPersona();
+  }, [authenticated, authChecked, buildPersona]);
 
-    setHasRun(true);
-    runPipeline();
-  }, [accessToken, hasRun, runPipeline]);
+  const removeTag = (tag: string) => setEditedTags(prev => prev.filter(t => t !== tag));
+  const addTag = () => {
+    const t = newTag.trim().toLowerCase();
+    if (t && !editedTags.includes(t)) setEditedTags(prev => [...prev, t]);
+    setNewTag('');
+  };
 
-  const handleSignOut = useCallback(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem('accessToken');
-      localStorage.removeItem('userEmail');
-      localStorage.removeItem('userName');
-    }
+  // ===================== RENDERS =====================
 
-    setAccessToken(null);
-    setUserEmail(null);
-    setUserName(null);
-    router.push('/');
-  }, [router]);
+  // Scanning — the visual calendar analysis
+  if (phase === 'init' || phase === 'scanning') {
+    return (
+      <div className="min-h-screen bg-white text-black flex flex-col">
+        <DashboardHeader />
+        <main className="flex-1 flex flex-col items-center justify-center px-6">
+          <div className="w-full max-w-md space-y-8">
+            {eventCount > 0 && (
+              <p className="text-xs text-center uppercase tracking-widest text-gray-400">
+                {eventCount} events found
+              </p>
+            )}
 
-  const pipelineComplete = useMemo(() => steps.every((step) => step.status === 'complete'), [steps]);
-  const hasFailure = useMemo(() => steps.some((step) => step.status === 'error'), [steps]);
-
-  const activeStep = useMemo(() => steps.find((step) => step.status === 'active'), [steps]);
-  const erroredStep = useMemo(() => steps.find((step) => step.status === 'error'), [steps]);
-  const lastCompletedStep = useMemo(
-    () =>
-      [...steps]
-        .reverse()
-        .find((step) => step.status === 'complete'),
-    [steps]
-  );
-
-  const displayStep = activeStep ?? erroredStep ?? lastCompletedStep ?? steps[0];
-
-  const timeframeLabel = useMemo(() => {
-    if (!calendarPayload?.timeframe) {
-      return null;
-    }
-
-    const { start, end } = calendarPayload.timeframe;
-    return `${new Date(start).toLocaleDateString()} – ${new Date(end).toLocaleDateString()}`;
-  }, [calendarPayload]);
-
-  const digestPageUrl = useMemo(() => {
-    if (!digestResult) {
-      return null;
-    }
-
-    if (digestResult.audioUrl.startsWith('http')) {
-      return digestResult.audioUrl;
-    }
-
-    if (typeof window === 'undefined') {
-      return digestResult.audioUrl;
-    }
-
-    return `${window.location.origin}${digestResult.audioUrl}`;
-  }, [digestResult]);
-
-  const eventStartLabel = useMemo(() => {
-    if (!calendarEvent) {
-      return null;
-    }
-
-    const start = calendarEvent.start?.dateTime || calendarEvent.start?.date;
-    if (!start) {
-      return null;
-    }
-
-    return new Date(start).toLocaleString(undefined, {
-      weekday: 'long',
-      hour: 'numeric',
-      minute: '2-digit',
-      month: 'long',
-      day: 'numeric',
-    });
-  }, [calendarEvent]);
-
-  const detailContent = useMemo(() => {
-    if (!displayStep) {
-      return null;
-    }
-
-    switch (displayStep.id) {
-      case 'calendar':
-        return (
-          <div className="space-y-4 rounded-lg border border-black bg-white p-6">
-            <h2 className="text-lg font-semibold uppercase tracking-wide text-black">Calendar Synced</h2>
-            {calendarPayload ? (
-              <>
-                <p className="text-sm text-gray-700">
-                  Pulled {calendarPayload.count.toLocaleString()} events
-                  {timeframeLabel ? ` from ${timeframeLabel}` : ''}.
+            <div className="h-40 flex flex-col justify-end overflow-hidden">
+              {scannedEvents.map((title, i) => (
+                <p
+                  key={`${title}-${i}`}
+                  className="text-sm text-gray-400 truncate transition-opacity duration-200"
+                  style={{ opacity: i === scannedEvents.length - 1 ? 1 : 0.3 + (i / scannedEvents.length) * 0.4 }}
+                >
+                  {title}
                 </p>
-                {calendarPayload.insights?.length ? (
-                  <div className="space-y-2">
-                    <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500">Signals I Noticed</h3>
-                    <ul className="list-disc space-y-1 pl-5 text-sm text-gray-700">
-                      {calendarPayload.insights.map((insight, index) => (
-                        <li key={`${insight}-${index}`}>{insight}</li>
-                      ))}
-                    </ul>
-                  </div>
-                ) : (
-                  <p className="text-sm text-gray-500">Listening for patterns…</p>
-                )}
-              </>
-            ) : (
-              <p className="text-sm text-gray-500">Fetching calendar history…</p>
-            )}
-          </div>
-        );
-      case 'persona':
-        return (
-          <div className="space-y-4 rounded-lg border border-black bg-white p-6">
-            <h2 className="text-lg font-semibold uppercase tracking-wide text-black">Persona Crafted</h2>
-            {persona ? (
-              <>
-                <p className="text-sm text-gray-700">{persona.persona_summary_120}</p>
-                <div className="grid gap-4 sm:grid-cols-2 text-sm">
-                  <div className="space-y-1">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Profile</p>
-                    <p className="text-gray-700">Role type: {persona.profile?.role_type || 'unknown'}</p>
-                    <p className="text-gray-700">Field: {persona.profile?.field || 'unknown'}</p>
-                    <p className="text-gray-700">
-                      Home base:{' '}
-                      {persona.profile?.home_base?.city || 'unknown'},{' '}
-                      {persona.profile?.home_base?.country || 'unknown'}
-                    </p>
-                    <p className="text-gray-700">
-                      Timezone: {persona.profile?.primary_timezone || 'unknown'}
-                    </p>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Rhythm</p>
-                    <p className="text-gray-700">
-                      Typical start: {persona.profile?.typical_day_start_local || 'unknown'}
-                    </p>
-                    <p className="text-gray-700">
-                      Wind down: {persona.profile?.typical_day_end_local || 'unknown'}
-                    </p>
-                    <p className="text-gray-700">
-                      Quiet hours: {persona.profile?.quiet_hours || 'unknown'}
-                    </p>
-                  </div>
-                </div>
-                {persona.profile?.interests_tags?.length ? (
-                  <div className="space-y-2 text-sm">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Signals</p>
-                    <div className="flex flex-wrap gap-2">
-                      {persona.profile.interests_tags.map((tag: string) => (
-                        <span
-                          key={tag}
-                          className="border border-black px-3 py-1 text-xs font-medium uppercase tracking-wide text-black"
-                        >
-                          {tag}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
-              </>
-            ) : (
-              <p className="text-sm text-gray-500">Synthesising persona…</p>
-            )}
-          </div>
-        );
-      case 'digest':
-        return null;
-      case 'audio':
-        return (
-          <div className="space-y-4 rounded-lg border border-black bg-white p-6">
-            <h2 className="text-lg font-semibold uppercase tracking-wide text-black">Audio Session Ready</h2>
-            {audioDataUrl ? (
+              ))}
+              {scannedEvents.length === 0 && (
+                <p className="text-sm text-gray-400">Reading your calendar...</p>
+              )}
+            </div>
+
+            {archetypes.length > 0 && (
               <div className="space-y-3">
-                <audio controls src={audioDataUrl} className="w-full" />
-                <p className="text-sm text-gray-700">
-                  Marcel recorded your digest. Share the digest link or play it straight from here.
-                </p>
-              </div>
-            ) : (
-              <p className="text-sm text-gray-500">Generating Marcel's recording…</p>
-            )}
-          </div>
-        );
-      case 'event':
-        return (
-          <div className="space-y-4 rounded-lg border border-black bg-white p-6">
-            <h2 className="text-lg font-semibold uppercase tracking-wide text-black">Calendar Event Scheduled</h2>
-            {calendarEvent ? (
-              <div className="space-y-3 text-sm text-gray-700">
-                <p>
-                  Scheduled for <span className="font-semibold">{eventStartLabel || 'next Sunday'}</span>
-                </p>
-                <p>Title: {calendarEvent.summary || 'Circling Back'}</p>
-                {calendarEvent.htmlLink ? (
-                  <a
-                    href={calendarEvent.htmlLink}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-black underline"
-                  >
-                    Open in Google Calendar
-                  </a>
-                ) : null}
-                <p className="text-xs text-gray-500">
-                  The audio link lives in the description so Sunday prep is one click away.
-                </p>
-              </div>
-            ) : (
-              <p className="text-sm text-gray-500">Adding the digest to your calendar…</p>
-            )}
-          </div>
-        );
-      default:
-        return null;
-    }
-  }, [
-    displayStep,
-    calendarPayload,
-    persona,
-    digestResult,
-    audioDataUrl,
-    calendarEvent,
-    timeframeLabel,
-    digestPageUrl,
-    eventStartLabel,
-  ]);
-
-  if (authError) {
-    return (
-      <div className="min-h-screen bg-white flex flex-col">
-        {/* Header */}
-        <header className="fixed top-0 left-0 right-0 z-20 backdrop-blur-md bg-white/80 border-b border-black/10">
-          <div className="px-6 py-4">
-            <div className="flex items-center space-x-2">
-              <svg className="w-6 h-6" viewBox="0 0 23.5703 21.5332" fill="black">
-                <path d="M7.61523 7.28711C9.63867 7.28711 11.2656 5.64648 11.2656 3.63672C11.2656 1.62695 9.63867 0 7.61523 0C5.60547 0 3.97852 1.62695 3.97852 3.63672C3.97852 5.64648 5.60547 7.28711 7.61523 7.28711ZM7.61523 5.30469C6.69922 5.30469 5.94727 4.55273 5.94727 3.63672C5.94727 2.7207 6.69922 1.96875 7.61523 1.96875C8.54492 1.96875 9.29688 2.7207 9.29688 3.63672C9.29688 4.55273 8.54492 5.30469 7.61523 5.30469ZM15.5996 7.28711C17.6094 7.28711 19.2363 5.64648 19.2363 3.63672C19.2363 1.62695 17.6094 0 15.5996 0C13.5898 0 11.9492 1.62695 11.9492 3.63672C11.9492 5.64648 13.5898 7.28711 15.5996 7.28711ZM15.5996 5.30469C14.6836 5.30469 13.9316 4.55273 13.9316 3.63672C13.9316 2.7207 14.6836 1.96875 15.5996 1.96875C16.5156 1.96875 17.2676 2.7207 17.2676 3.63672C17.2676 4.55273 16.5156 5.30469 15.5996 5.30469ZM3.65039 14.4102C5.66016 14.4102 7.28711 12.7695 7.28711 10.7598C7.28711 8.75 5.66016 7.10938 3.65039 7.10938C1.62695 7.10938 0 8.75 0 10.7598C0 12.7695 1.62695 14.4102 3.65039 14.4102ZM3.65039 12.4277C2.7207 12.4277 1.96875 11.6758 1.96875 10.7598C1.96875 9.84375 2.7207 9.0918 3.65039 9.0918C4.56641 9.0918 5.31836 9.84375 5.31836 10.7598C5.31836 11.6758 4.56641 12.4277 3.65039 12.4277ZM19.5781 14.4102C21.5879 14.4102 23.2148 12.7695 23.2148 10.7598C23.2148 8.75 21.5879 7.10938 19.5781 7.10938C17.5684 7.10938 15.9277 8.75 15.9277 10.7598C15.9277 12.7695 17.5684 14.4102 19.5781 14.4102ZM19.5781 12.4277C18.6484 12.4277 17.8965 11.6758 17.8965 10.7598C17.8965 9.84375 18.6484 9.0918 19.5781 9.0918C20.4941 9.0918 21.2461 9.84375 21.2461 10.7598C21.2461 11.6758 20.4941 12.4277 19.5781 12.4277ZM7.61523 21.5332C9.63867 21.5332 11.2656 19.9062 11.2656 17.8965C11.2656 15.8867 9.63867 14.2461 7.61523 14.2461C5.60547 14.2461 3.97852 15.8867 3.97852 17.8965C3.97852 19.9062 5.60547 21.5332 7.61523 21.5332ZM7.61523 19.5645C6.69922 19.5645 5.94727 18.8125 5.94727 17.8965C5.94727 16.9805 6.69922 16.2285 7.61523 16.2285C8.54492 16.2285 9.29688 16.9805 9.29688 17.8965C9.29688 18.8125 8.54492 19.5645 7.61523 19.5645ZM15.5996 21.5332C17.6094 21.5332 19.2363 19.9062 19.2363 17.8965C19.2363 15.8867 17.6094 14.2461 15.5996 14.2461C13.5898 14.2461 11.9492 15.8867 11.9492 17.8965C11.9492 19.9062 13.5898 21.5332 15.5996 21.5332ZM15.5996 19.5645C14.6836 19.5645 13.9316 18.8125 13.9316 17.8965C13.9316 16.9805 14.6836 16.2285 15.5996 16.2285C16.5156 16.2285 17.2676 16.9805 17.2676 17.8965C17.2676 18.8125 16.5156 19.5645 15.5996 19.5645Z"/>
-              </svg>
-              <span className="text-xl font-bold text-black">Loop</span>
-            </div>
-          </div>
-        </header>
-
-        <div className="flex-1 flex flex-col items-center justify-center px-6 text-center pt-20">
-          <h1 className="text-2xl font-semibold text-black">Authentication Error</h1>
-          <p className="mt-4 text-sm text-gray-600">{authError}</p>
-          <button
-            type="button"
-            onClick={() => router.push('/')}
-            className="mt-6 minimal-button"
-          >
-            Try Again
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  if (!accessToken) {
-    return (
-      <div className="min-h-screen bg-white flex flex-col">
-        {/* Header */}
-        <header className="fixed top-0 left-0 right-0 z-20 backdrop-blur-md bg-white/80 border-b border-black/10">
-          <div className="px-6 py-4">
-            <div className="flex items-center space-x-2">
-              <svg className="w-6 h-6" viewBox="0 0 23.5703 21.5332" fill="black">
-                <path d="M7.61523 7.28711C9.63867 7.28711 11.2656 5.64648 11.2656 3.63672C11.2656 1.62695 9.63867 0 7.61523 0C5.60547 0 3.97852 1.62695 3.97852 3.63672C3.97852 5.64648 5.60547 7.28711 7.61523 7.28711ZM7.61523 5.30469C6.69922 5.30469 5.94727 4.55273 5.94727 3.63672C5.94727 2.7207 6.69922 1.96875 7.61523 1.96875C8.54492 1.96875 9.29688 2.7207 9.29688 3.63672C9.29688 4.55273 8.54492 5.30469 7.61523 5.30469ZM15.5996 7.28711C17.6094 7.28711 19.2363 5.64648 19.2363 3.63672C19.2363 1.62695 17.6094 0 15.5996 0C13.5898 0 11.9492 1.62695 11.9492 3.63672C11.9492 5.64648 13.5898 7.28711 15.5996 7.28711ZM15.5996 5.30469C14.6836 5.30469 13.9316 4.55273 13.9316 3.63672C13.9316 2.7207 14.6836 1.96875 15.5996 1.96875C16.5156 1.96875 17.2676 2.7207 17.2676 3.63672C17.2676 4.55273 16.5156 5.30469 15.5996 5.30469ZM3.65039 14.4102C5.66016 14.4102 7.28711 12.7695 7.28711 10.7598C7.28711 8.75 5.66016 7.10938 3.65039 7.10938C1.62695 7.10938 0 8.75 0 10.7598C0 12.7695 1.62695 14.4102 3.65039 14.4102ZM3.65039 12.4277C2.7207 12.4277 1.96875 11.6758 1.96875 10.7598C1.96875 9.84375 2.7207 9.0918 3.65039 9.0918C4.56641 9.0918 5.31836 9.84375 5.31836 10.7598C5.31836 11.6758 4.56641 12.4277 3.65039 12.4277ZM19.5781 14.4102C21.5879 14.4102 23.2148 12.7695 23.2148 10.7598C23.2148 8.75 21.5879 7.10938 19.5781 7.10938C17.5684 7.10938 15.9277 8.75 15.9277 10.7598C15.9277 12.7695 17.5684 14.4102 19.5781 14.4102ZM19.5781 12.4277C18.6484 12.4277 17.8965 11.6758 17.8965 10.7598C17.8965 9.84375 18.6484 9.0918 19.5781 9.0918C20.4941 9.0918 21.2461 9.84375 21.2461 10.7598C21.2461 11.6758 20.4941 12.4277 19.5781 12.4277ZM7.61523 21.5332C9.63867 21.5332 11.2656 19.9062 11.2656 17.8965C11.2656 15.8867 9.63867 14.2461 7.61523 14.2461C5.60547 14.2461 3.97852 15.8867 3.97852 17.8965C3.97852 19.9062 5.60547 21.5332 7.61523 21.5332ZM7.61523 19.5645C6.69922 19.5645 5.94727 18.8125 5.94727 17.8965C5.94727 16.9805 6.69922 16.2285 7.61523 16.2285C8.54492 16.2285 9.29688 16.9805 9.29688 17.8965C9.29688 18.8125 8.54492 19.5645 7.61523 19.5645ZM15.5996 21.5332C17.6094 21.5332 19.2363 19.9062 19.2363 17.8965C19.2363 15.8867 17.6094 14.2461 15.5996 14.2461C13.5898 14.2461 11.9492 15.8867 11.9492 17.8965C11.9492 19.9062 13.5898 21.5332 15.5996 21.5332ZM15.5996 19.5645C14.6836 19.5645 13.9316 18.8125 13.9316 17.8965C13.9316 16.9805 14.6836 16.2285 15.5996 16.2285C16.5156 16.2285 17.2676 16.9805 17.2676 17.8965C17.2676 18.8125 16.5156 19.5645 15.5996 19.5645Z"/>
-              </svg>
-              <span className="text-xl font-bold text-black">Loop</span>
-            </div>
-          </div>
-        </header>
-
-        <div className="flex-1 flex flex-col items-center justify-center px-6 text-center pt-20">
-          <div className="mb-4 h-12 w-12 animate-spin rounded-full border-2 border-black border-t-transparent"></div>
-          <h2 className="text-lg font-medium text-black">Setting up your calendar access…</h2>
-          <p className="mt-2 text-sm text-gray-600">Hang tight for a moment.</p>
-        </div>
-      </div>
-    );
-  }
-
-  const headline = hasFailure
-    ? 'We hit a snag — ready when you are'
-    : '';
-
-  const supportingLine = hasFailure
-    ? 'Fix the step below or rerun the flow. Everything else will pick up automatically.'
-    : '';
-
-  const primaryButtonLabel = hasFailure ? (isRunning ? 'Retrying…' : 'Retry Pipeline') : isRunning ? 'Working…' : 'Restart';
-
-  const primaryButtonDisabled = isRunning && !hasFailure;
-
-  return (
-    <div className="min-h-screen bg-white text-black flex flex-col">
-      {/* Header */}
-      <header className="fixed top-0 left-0 right-0 z-20 backdrop-blur-md bg-white/80 border-b border-black/10">
-        <div className="px-6 py-4">
-          <div className="flex items-center space-x-2">
-            <svg className="w-6 h-6" viewBox="0 0 23.5703 21.5332" fill="black">
-              <path d="M7.61523 7.28711C9.63867 7.28711 11.2656 5.64648 11.2656 3.63672C11.2656 1.62695 9.63867 0 7.61523 0C5.60547 0 3.97852 1.62695 3.97852 3.63672C3.97852 5.64648 5.60547 7.28711 7.61523 7.28711ZM7.61523 5.30469C6.69922 5.30469 5.94727 4.55273 5.94727 3.63672C5.94727 2.7207 6.69922 1.96875 7.61523 1.96875C8.54492 1.96875 9.29688 2.7207 9.29688 3.63672C9.29688 4.55273 8.54492 5.30469 7.61523 5.30469ZM15.5996 7.28711C17.6094 7.28711 19.2363 5.64648 19.2363 3.63672C19.2363 1.62695 17.6094 0 15.5996 0C13.5898 0 11.9492 1.62695 11.9492 3.63672C11.9492 5.64648 13.5898 7.28711 15.5996 7.28711ZM15.5996 5.30469C14.6836 5.30469 13.9316 4.55273 13.9316 3.63672C13.9316 2.7207 14.6836 1.96875 15.5996 1.96875C16.5156 1.96875 17.2676 2.7207 17.2676 3.63672C17.2676 4.55273 16.5156 5.30469 15.5996 5.30469ZM3.65039 14.4102C5.66016 14.4102 7.28711 12.7695 7.28711 10.7598C7.28711 8.75 5.66016 7.10938 3.65039 7.10938C1.62695 7.10938 0 8.75 0 10.7598C0 12.7695 1.62695 14.4102 3.65039 14.4102ZM3.65039 12.4277C2.7207 12.4277 1.96875 11.6758 1.96875 10.7598C1.96875 9.84375 2.7207 9.0918 3.65039 9.0918C4.56641 9.0918 5.31836 9.84375 5.31836 10.7598C5.31836 11.6758 4.56641 12.4277 3.65039 12.4277ZM19.5781 14.4102C21.5879 14.4102 23.2148 12.7695 23.2148 10.7598C23.2148 8.75 21.5879 7.10938 19.5781 7.10938C17.5684 7.10938 15.9277 8.75 15.9277 10.7598C15.9277 12.7695 17.5684 14.4102 19.5781 14.4102ZM19.5781 12.4277C18.6484 12.4277 17.8965 11.6758 17.8965 10.7598C17.8965 9.84375 18.6484 9.0918 19.5781 9.0918C20.4941 9.0918 21.2461 9.84375 21.2461 10.7598C21.2461 11.6758 20.4941 12.4277 19.5781 12.4277ZM7.61523 21.5332C9.63867 21.5332 11.2656 19.9062 11.2656 17.8965C11.2656 15.8867 9.63867 14.2461 7.61523 14.2461C5.60547 14.2461 3.97852 15.8867 3.97852 17.8965C3.97852 19.9062 5.60547 21.5332 7.61523 21.5332ZM7.61523 19.5645C6.69922 19.5645 5.94727 18.8125 5.94727 17.8965C5.94727 16.9805 6.69922 16.2285 7.61523 16.2285C8.54492 16.2285 9.29688 16.9805 9.29688 17.8965C9.29688 18.8125 8.54492 19.5645 7.61523 19.5645ZM15.5996 21.5332C17.6094 21.5332 19.2363 19.9062 19.2363 17.8965C19.2363 15.8867 17.6094 14.2461 15.5996 14.2461C13.5898 14.2461 11.9492 15.8867 11.9492 17.8965C11.9492 19.9062 13.5898 21.5332 15.5996 21.5332ZM15.5996 19.5645C14.6836 19.5645 13.9316 18.8125 13.9316 17.8965C13.9316 16.9805 14.6836 16.2285 15.5996 16.2285C16.5156 16.2285 17.2676 16.9805 17.2676 17.8965C17.2676 18.8125 16.5156 19.5645 15.5996 19.5645Z"/>
-            </svg>
-            <span className="text-xl font-bold text-black">Loop</span>
-            </div>
-          </div>
-      </header>
-
-      <style jsx>{`
-        @keyframes gradientShift {
-          0% {
-            background-position: 0% 50%;
-          }
-          50% {
-            background-position: 100% 50%;
-          }
-          100% {
-            background-position: 0% 50%;
-          }
-        }
-        
-        @keyframes fadeInText {
-          0% {
-            opacity: 0;
-            transform: translateY(10px);
-          }
-          100% {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-        
-        @keyframes pulseOpacity {
-          0% {
-            opacity: 0.6;
-          }
-          50% {
-            opacity: 1;
-          }
-          100% {
-            opacity: 0.6;
-          }
-        }
-        
-        .gradient-text {
-          color: #ffffff !important;
-          animation: pulseOpacity 1.5s ease-in-out infinite;
-        }
-        
-        .gradient-text p {
-          color: #ffffff !important;
-        }
-      `}</style>
-
-      <main className="mx-auto flex max-w-6xl flex-col gap-8 px-6 py-8 pt-20">
-        <div className="mx-auto w-full max-w-2xl">
-          {headline && (
-            <div className="mb-6 space-y-2">
-              <h1 className="text-2xl font-semibold text-black">{headline}</h1>
-              {supportingLine && <p className="text-sm text-gray-600">{supportingLine}</p>}
-        </div>
-          )}
-
-          {pipelineError ? (
-            <div className="mb-6 rounded-lg border border-red-500 bg-red-50 px-4 py-3 text-sm text-red-600">
-              {pipelineError}
-      </div>
-          ) : null}
-
-          <ul className="space-y-3">
-            {steps.map((step) => {
-              const isActive = step.status === 'active';
-              const isComplete = step.status === 'complete';
-              const isError = step.status === 'error';
-
-              const cardClass = [
-                'flex items-center gap-3 rounded-lg border px-4 py-3 transition-colors duration-300',
-                isActive ? 'border-black bg-black text-white shadow-[0_8px_0_0_rgba(0,0,0,0.08)]' : '',
-                isComplete && !isActive ? 'border-black bg-white text-black' : '',
-                !isActive && !isComplete && !isError ? 'border-dashed border-gray-300 bg-gray-50 text-gray-600' : '',
-                isError ? 'border-red-500 bg-red-50 text-red-600' : '',
-              ]
-                .filter(Boolean)
-                .join(' ');
-
-              const isExpanded = expandedSteps.has(step.id);
-              const hasContent = (step.id === 'calendar' && calendarPayload) ||
-                               (step.id === 'persona' && persona) ||
-                               (step.id === 'digest' && digestResult) ||
-                               (step.id === 'audio' && audioDataUrl) ||
-                               (step.id === 'agent' && agentData) ||
-                               (step.id === 'suggest' && recommendations && recommendations.recommendations) ||
-                               (step.id === 'event' && calendarEvent);
-              
-              if (step.id === 'agent') {
-                console.log('Agent step hasContent check:', { 
-                  stepId: step.id, 
-                  agentData, 
-                  hasContent 
-                });
-              }
-
-              return (
-                <li key={step.id}>
-                  <div className="w-full">
-                    <div 
-                      className={`${cardClass} ${hasContent ? 'cursor-pointer hover:opacity-80' : ''}`}
-                      onClick={hasContent ? () => toggleStepExpansion(step.id) : undefined}
-                    >
-                      <div className="flex-1 space-y-1">
-                        <div className="flex items-center gap-2">
-                          <p className="text-sm font-semibold uppercase tracking-wide">
-                            {step.title}
-                          </p>
-                          {hasContent && (
-                            <span className="text-xs opacity-60">
-                              {isExpanded ? '▼' : '▶'}
-                            </span>
-                          )}
-                        </div>
-                        <AnimatedText
-                          text={isActive ? STEP_DESCRIPTIONS[step.id][activeStepDescriptions[step.id]] : step.description}
-                          isActive={isActive}
-                          className={`text-sm ${isError ? 'text-red-600' : 'text-gray-600'}`}
-                        />
-                        {step.error ? (
-                          <p className="text-sm font-medium text-red-600">{step.error}</p>
-        ) : null}
-                      </div>
-                      <StepStatusIcon status={step.status} />
+                {archetypes.slice(0, 5).map((a, i) => (
+                  <div key={a.id} className="space-y-1" style={{ animationDelay: `${i * 150}ms` }}>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-semibold uppercase tracking-wide">{a.label}</span>
+                      <span className="text-gray-400">{a.score}%</span>
                     </div>
-                    
-                    {isExpanded && hasContent && (
-                      <div className="mt-2 animate-in slide-in-from-top-2 duration-200 w-full">
-                        {renderStepContent(step.id)}
-                      </div>
-                    )}
+                    <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden">
+                      <div
+                        className="h-full bg-black rounded-full transition-all duration-1000 ease-out"
+                        style={{ width: scanComplete ? `${a.score}%` : '0%' }}
+                      />
+                    </div>
                   </div>
-                </li>
-              );
-            })}
-          </ul>
+                ))}
+              </div>
+            )}
 
-          <div className="mt-6">
-            {hasFailure ? (
-            <button
-                type="button"
-                onClick={runPipeline}
-                className="minimal-button"
-              >
-                Retry Pipeline
-            </button>
-            ) : pipelineComplete ? (
-              <a
-                href="https://calendar.google.com"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="minimal-button flex items-center justify-center gap-2"
-              >
-                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                  <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                  <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
-                  <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-                </svg>
-                Open Calendar
-              </a>
-            ) : null}
-            </div>
-        </div>
-      </main>
-    </div>
-  );
-}
-
-function StepStatusIcon({ status }: { status: StepStatus }) {
-  switch (status) {
-    case 'complete':
-      return (
-        <span className="flex h-6 w-6 items-center justify-center rounded-full border border-black bg-black text-xs font-semibold text-white">
-          ✓
-        </span>
-      );
-    case 'active':
-      return (
-        <span className="h-6 w-6 animate-spin rounded-full border-2 border-white border-t-transparent"></span>
-      );
-    case 'error':
-      return (
-        <span className="flex h-6 w-6 items-center justify-center rounded-full border border-red-500 text-xs font-semibold text-red-500">
-          !
-        </span>
-      );
-    default:
-      return <span className="h-6 w-6 rounded-full border border-dashed border-gray-300"></span>;
+            {scanComplete && (
+              <p className="text-xs text-center text-gray-400 animate-pulse">Building your profile...</p>
+            )}
+          </div>
+        </main>
+      </div>
+    );
   }
+
+  // Searching
+  if (phase === 'searching') {
+    return (
+      <div className="min-h-screen bg-white text-black flex flex-col">
+        <DashboardHeader />
+        <div className="flex-1 flex flex-col items-center justify-center px-6">
+          <div className="space-y-6 text-center max-w-md">
+            <div className="mx-auto h-1 w-32 rounded-full bg-gray-200 overflow-hidden">
+              <div className="h-full bg-black rounded-full animate-pulse" style={{ width: '60%' }} />
+            </div>
+            <p className="text-lg text-gray-500 font-light">{loadingMessage}</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Error
+  if (phase === 'error') {
+    return (
+      <div className="min-h-screen bg-white flex flex-col">
+        <DashboardHeader />
+        <div className="flex-1 flex flex-col items-center justify-center px-6 text-center">
+          <h1 className="text-2xl font-semibold">Couldn't make it work</h1>
+          <p className="mt-2 text-sm text-gray-500 max-w-sm">{errorMessage}</p>
+          <button type="button" onClick={() => buildPersona(true)} className="mt-6 minimal-button">Try again</button>
+        </div>
+      </div>
+    );
+  }
+
+  // Persona reveal + edit
+  if (phase === 'persona' && persona) {
+    const profile = persona.profile || {};
+    const summary = persona.persona_summary_120 || '';
+
+    return (
+      <div className="min-h-screen bg-white text-black flex flex-col">
+        <DashboardHeader />
+
+        <main className="mx-auto flex max-w-2xl flex-col px-6 pt-24 pb-16">
+          <p className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-3">
+            Based on {eventCount || 'your'} calendar events
+          </p>
+          <h1 className="text-3xl font-bold mb-8">This is you</h1>
+
+          <div className="space-y-8">
+            {archetypes.length > 0 && (
+              <div className="space-y-3">
+                {archetypes.slice(0, 5).map((a) => (
+                  <div key={a.id} className="space-y-1">
+                    <div className="flex items-center justify-between text-xs">
+                      <div>
+                        <span className="font-semibold uppercase tracking-wide">{a.label}</span>
+                        <span className="text-gray-400 ml-2 font-normal normal-case">{a.description}</span>
+                      </div>
+                      <span className="text-gray-400 ml-4 tabular-nums">{a.score}%</span>
+                    </div>
+                    <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden">
+                      <div className="h-full bg-black rounded-full" style={{ width: `${a.score}%` }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {summary && (
+              <p className="text-sm text-gray-600 leading-relaxed">{summary}</p>
+            )}
+
+            <div className="space-y-2">
+              <label className="text-xs font-semibold uppercase tracking-wide text-gray-400">City</label>
+              <input
+                type="text"
+                value={editedCity}
+                onChange={(e) => setEditedCity(e.target.value)}
+                className="w-full rounded-lg border border-gray-200 px-4 py-2.5 text-sm focus:border-black focus:outline-none"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              {profile.role_type && profile.role_type !== 'unknown' && (
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-gray-400 mb-1">Role</p>
+                  <p>{profile.role_type}{profile.field ? ` · ${profile.field}` : ''}</p>
+                </div>
+              )}
+              {profile.weekend_social_load && profile.weekend_social_load !== 'unknown' && (
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-gray-400 mb-1">Weekend energy</p>
+                  <p className="capitalize">{profile.weekend_social_load}</p>
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Interests — tap to remove, type to add</p>
+              <div className="flex flex-wrap gap-2">
+                {editedTags.map((tag) => (
+                  <button
+                    key={tag}
+                    type="button"
+                    onClick={() => removeTag(tag)}
+                    className="rounded-full border border-black bg-black text-white px-3.5 py-1.5 text-xs font-medium flex items-center gap-1.5 hover:bg-gray-800 transition-colors"
+                  >
+                    {tag}
+                    <span className="text-white/50">×</span>
+                  </button>
+                ))}
+                <input
+                  type="text"
+                  value={newTag}
+                  onChange={(e) => setNewTag(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && addTag()}
+                  placeholder="+ add"
+                  className="rounded-full border border-dashed border-gray-300 px-3.5 py-1.5 text-xs w-20 focus:border-black focus:outline-none"
+                />
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={findEvent}
+              disabled={!editedCity.trim() || editedTags.length === 0}
+              className="minimal-button w-full py-3 text-base disabled:opacity-40"
+            >
+              Find my event
+            </button>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
+  // The Reveal
+  if (phase === 'reveal' && discoveredEvent) {
+    const city = editedCity || persona?.profile?.home_base?.city;
+
+    return (
+      <div className="min-h-screen bg-white text-black flex flex-col">
+        <DashboardHeader />
+
+        <main className="mx-auto flex max-w-2xl flex-col px-6 pt-24 pb-16">
+          <p className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-3">
+            {city ? `This week in ${city}` : 'This week'}
+          </p>
+          <h1 className="text-4xl md:text-5xl font-bold leading-tight mb-8">{discoveredEvent.event_title}</h1>
+
+          <div className="space-y-6">
+            <div className="flex flex-wrap gap-x-8 gap-y-3 text-sm">
+              <div>
+                <p className="text-xs uppercase tracking-wide text-gray-400 mb-1">When</p>
+                <p className="font-medium">
+                  {new Date(discoveredEvent.date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+                  {' at '}{discoveredEvent.time}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs uppercase tracking-wide text-gray-400 mb-1">Where</p>
+                <p className="font-medium">{discoveredEvent.venue}</p>
+                <p className="text-gray-500 text-xs">{discoveredEvent.address}</p>
+              </div>
+            </div>
+
+            <div className="border-l-2 border-black pl-4 py-1">
+              <p className="text-base text-gray-800 leading-relaxed">{discoveredEvent.description}</p>
+            </div>
+
+            <p className="text-sm italic text-gray-500">{discoveredEvent.why_this}</p>
+
+            {calendarEvent && (
+              <p className="text-xs text-gray-400">Added to your calendar.</p>
+            )}
+
+            <div className="flex flex-wrap gap-3 pt-2">
+              {discoveredEvent.url && (
+                <a href={discoveredEvent.url} target="_blank" rel="noopener noreferrer"
+                  className="minimal-button inline-flex items-center gap-2">
+                  Get tickets / details
+                </a>
+              )}
+              {calendarEvent?.htmlLink && (
+                <a href={calendarEvent.htmlLink} target="_blank" rel="noopener noreferrer"
+                  className="rounded-lg border border-gray-300 px-5 py-2.5 text-sm font-semibold uppercase tracking-wide hover:border-black transition-colors">
+                  View in Calendar
+                </a>
+              )}
+            </div>
+
+            <div className="pt-8 border-t border-gray-100 mt-8">
+              <button
+                type="button"
+                onClick={() => { setDiscoveredEvent(null); setCalendarEvent(null); setPhase('persona'); }}
+                className="text-sm text-gray-400 hover:text-black transition-colors"
+              >
+                Not feeling it? Tweak & retry →
+              </button>
+            </div>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
+  return null;
 }
 
 export default function DashboardPage() {
   return (
-    <Suspense fallback={<div>Loading...</div>}>
+    <Suspense fallback={<div className="min-h-screen bg-white" />}>
       <Dashboard />
     </Suspense>
   );

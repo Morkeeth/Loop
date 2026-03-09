@@ -1,131 +1,14 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Logo } from './Logo';
 
 export default function LandingHero() {
   const [isLoading, setIsLoading] = useState(false);
-  const [blocks, setBlocks] = useState<Array<{
-    id: number;
-    left: number;
-    width: number;
-    height: number;
-    delay: number;
-    event: { title: string; time: string; location?: string };
-  }>>([]);
   const router = useRouter();
-
-  // Generate infinite stream of blocks
-  useEffect(() => {
-    const events = [
-      // Work Events
-      { title: "Team Standup", time: "9:00 AM" },
-      { title: "Client Meeting", time: "10:30 AM", location: "Conference Room A" },
-      { title: "Code Review", time: "2:00 PM" },
-      { title: "Sprint Planning", time: "3:30 PM" },
-      { title: "Design Review", time: "11:00 AM" },
-      { title: "Product Demo", time: "4:00 PM", location: "Main Conference" },
-      { title: "1:1 with Manager", time: "1:00 PM" },
-      { title: "All Hands Meeting", time: "10:00 AM" },
-      { title: "Bug Triage", time: "2:30 PM" },
-      { title: "Architecture Discussion", time: "3:00 PM" },
-      { title: "Performance Review", time: "11:30 AM" },
-      { title: "Budget Planning", time: "4:30 PM" },
-      
-      // Personal Events
-      { title: "Café Crème", time: "8:30 AM" },
-      { title: "Marché aux Puces", time: "2:00 PM", location: "Saint-Ouen" },
-      { title: "Apéro Hour", time: "6:00 PM" },
-      { title: "Boulangerie Run", time: "8:00 AM" },
-      { title: "Seine Walk", time: "5:00 PM" },
-      { title: "Wine Tasting", time: "7:00 PM" },
-      { title: "Museum Visit", time: "11:00 AM" },
-      { title: "Bookstore Browse", time: "3:00 PM" }
-    ];
-
-    let blockId = 0;
-    
-    const addNewBlock = () => {
-      const event = events[Math.floor(Math.random() * events.length)];
-      
-      // Create two zones to avoid center area (logo and Google button)
-      // Left zone: 5% to 35% of screen width
-      // Right zone: 65% to 95% of screen width
-      const isLeftZone = Math.random() > 0.5;
-      const zoneStart = isLeftZone ? 5 : 65;
-      const zoneEnd = isLeftZone ? 35 : 95;
-      
-      const width = Math.random() > 0.5 ? 200 : 100;
-      const height = Math.random() > 0.5 ? 60 : 120;
-      
-      // Convert percentage to pixels for collision detection
-      const screenWidth = window.innerWidth;
-      const zoneStartPx = (zoneStart / 100) * screenWidth;
-      const zoneEndPx = (zoneEnd / 100) * screenWidth;
-      const availableWidth = zoneEndPx - zoneStartPx;
-      
-      // Try to find a non-overlapping position
-      let attempts = 0;
-      let left = Math.random() * (zoneEnd - zoneStart) + zoneStart; // Default fallback
-      let foundPosition = false;
-      
-      while (attempts < 10 && !foundPosition) {
-        const randomLeftPx = Math.random() * (availableWidth - width);
-        const candidateLeftPx = zoneStartPx + randomLeftPx;
-        const candidateLeftPercent = (candidateLeftPx / screenWidth) * 100;
-        
-        // Check for collisions with existing blocks
-        const hasCollision = blocks.some(block => {
-          const blockLeftPx = (block.left / 100) * screenWidth;
-          const blockRightPx = blockLeftPx + block.width;
-          const candidateRightPx = candidateLeftPx + width;
-          
-          // Check if blocks overlap horizontally
-          return !(candidateRightPx <= blockLeftPx || candidateLeftPx >= blockRightPx);
-        });
-        
-        if (!hasCollision) {
-          left = candidateLeftPercent;
-          foundPosition = true;
-        }
-        
-        attempts++;
-      }
-      
-      // If we couldn't find a non-overlapping position, left already has the fallback value
-      
-      const newBlock = {
-        id: blockId++,
-        left: left,
-        width: width,
-        height: height,
-        delay: 0,
-        event
-      };
-      
-      setBlocks(prev => [...prev, newBlock]);
-      
-      // Remove block after animation completes
-      setTimeout(() => {
-        setBlocks(prev => prev.filter(block => block.id !== newBlock.id));
-      }, 8000);
-    };
-
-    // Start with 3 blocks
-    for (let i = 0; i < 3; i++) {
-      setTimeout(() => addNewBlock(), i * 3000);
-    }
-    
-    // Add new block every 3 seconds for continuous flow
-    const interval = setInterval(addNewBlock, 3000);
-    return () => clearInterval(interval);
-  }, []);
 
   const handleGoogleAuth = () => {
     setIsLoading(true);
-    
-    // Redirect to Google OAuth
     const params = new URLSearchParams({
       client_id: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '',
       redirect_uri: `${window.location.origin}/api/auth/callback`,
@@ -140,12 +23,11 @@ export default function LandingHero() {
       access_type: 'offline',
       prompt: 'consent',
     });
-
     window.location.href = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
   };
 
   return (
-    <div className="min-h-screen flex flex-col px-6 relative">
+    <div className="min-h-screen flex flex-col px-6">
       {/* Header */}
       <header className="fixed top-0 left-0 right-0 z-20 backdrop-blur-md bg-white/80 border-b border-black/10">
         <div className="px-6 py-4">
@@ -158,44 +40,20 @@ export default function LandingHero() {
         </div>
       </header>
 
-      {/* Tetris-like Falling Calendar Background */}
-      <div className="tetris-background">
-        <div className="tetris-grid"></div>
-        <div className="tetris-blocks">
-          {blocks.map((block) => (
-            <div 
-              key={block.id}
-              className="tetris-block"
-              style={{
-                left: `${block.left}%`,
-                width: `${block.width}px`,
-                height: `${block.height}px`,
-                animationDelay: `${block.delay}s`
-              }}
-            >
-              <div className="event-title">{block.event.title}</div>
-              <div className="event-time">{block.event.time}</div>
-              {block.event.location && (
-                <div className="event-location">{block.event.location}</div>
-              )}
-            </div>
-          ))}
-        </div>
-      </div>
-
       {/* Main Content */}
-      <div className="flex-1 flex flex-col items-center justify-center pt-20">
-        {/* Main Title */}
-        <div className="text-center mb-12 relative z-10">
-          <h1 className="text-6xl md:text-7xl font-bold text-black leading-tight">
-            Calendar In,<br />
-            Clarity Out
-          </h1>
-        </div>
+      <div className="flex-1 flex flex-col items-center justify-center pt-20 pb-16">
+        <div className="text-center max-w-lg space-y-8">
+          <div className="space-y-4">
+            <h1 className="text-5xl md:text-6xl font-bold text-black leading-[1.1]">
+              One magical event.<br />
+              Every week.
+            </h1>
+            <p className="text-lg text-gray-500 max-w-sm mx-auto">
+              Loop reads your calendar, understands your life, and finds the one thing you shouldn't miss this week.
+            </p>
+          </div>
 
-        {/* Google Sign-in Section */}
-        <div className="space-y-6 text-center relative z-10">
-          <div className="flex flex-col items-center space-y-4">
+          <div className="space-y-4">
             <button
               onClick={handleGoogleAuth}
               disabled={isLoading}
@@ -207,20 +65,19 @@ export default function LandingHero() {
                 <path fill="currentColor" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
                 <path fill="currentColor" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
               </svg>
-              <span>Continue with Google</span>
+              <span>{isLoading ? 'Connecting...' : 'Connect Google Calendar'}</span>
             </button>
-            
-            {isLoading && (
-              <div className="flex items-center space-x-2 text-gray-600">
-                <div className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin"></div>
-                <span>Connecting your calendar...</span>
-              </div>
-            )}
+
+            <button
+              onClick={() => router.push('/explore')}
+              className="block mx-auto text-sm text-gray-400 hover:text-black transition-colors"
+            >
+              No calendar? Try it anyway →
+            </button>
           </div>
-          
-          <p className="text-sm text-gray-500 max-w-md mx-auto">
-            By connecting your calendar, you agree to our privacy policy. 
-            We only access your calendar data to provide personalized insights.
+
+          <p className="text-xs text-gray-300 max-w-xs mx-auto">
+            We read your calendar to understand your vibe. Nothing is stored on our servers.
           </p>
         </div>
       </div>
