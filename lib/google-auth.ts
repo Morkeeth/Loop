@@ -30,7 +30,6 @@ export async function verifyGoogleToken(token: string): Promise<GoogleUserInfo |
       verified_email: payload.email_verified || false,
     };
   } catch (error) {
-    console.error('Error verifying Google token:', error);
     return null;
   }
 }
@@ -76,7 +75,6 @@ export async function exchangeCodeForTokens(code: string) {
 
     return await response.json();
   } catch (error) {
-    console.error('Error exchanging code for tokens:', error);
     throw error;
   }
 }

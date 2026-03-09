@@ -9,8 +9,8 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Loop - AI-Powered Calendar Intelligence",
-  description: "Transform your calendar from a scheduling tool into a personalized life assistant",
+  title: "Loop — One magical event, every week",
+  description: "Loop reads your calendar, understands your vibe, and finds the one thing you shouldn't miss this week.",
 };
 
 export default function RootLayout({
