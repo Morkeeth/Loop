@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { fetchEventsFromIcalUrl } from '@/lib/ical-service';
-import { CalendarService } from '@/lib/calendar-service';
+
+export const dynamic = 'force-dynamic';
 
 type NormalizedEvent = {
   id: string;
@@ -52,6 +52,9 @@ function getTimeframe(events: NormalizedEvent[]) {
 
 export async function GET(request: NextRequest) {
   try {
+    const { fetchEventsFromIcalUrl } = await import('@/lib/ical-service');
+    const { CalendarService } = await import('@/lib/calendar-service');
+
     const { searchParams } = new URL(request.url);
     const icalUrl = searchParams.get('icalUrl');
     const monthsBack = parseInt(searchParams.get('monthsBack') || '6');
