@@ -74,8 +74,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const hasUserKey = Boolean(userApiKey?.trim());
-    const apiKey = hasUserKey ? userApiKey!.trim() : process.env.OPENAI_API_KEY;
+    const isPremium = Boolean(userApiKey?.trim());
+    const apiKey = isPremium ? userApiKey!.trim() : process.env.OPENAI_API_KEY;
     if (!apiKey) {
       return NextResponse.json(
         { error: 'OpenAI API key not configured. Add your key in Setup or set OPENAI_API_KEY.' },
@@ -96,51 +96,71 @@ export async function POST(request: NextRequest) {
       ? archetypeProfile.match(/BUDGET:\s*(.+)/)?.[1]?.trim() || ''
       : '';
 
-    const cleanSystemPrompt = `You are Loop's event curation engine. Find 3 real, specific, upcoming events for this user.
+    const currentDateStr = new Date(currentDate).toISOString().split('T')[0];
+    const personaSummary = `${persona.professional?.jobTitle || 'Professional'} in ${persona.professional?.industry || 'tech'} based in ${persona.location?.primaryLocation || 'your city'}`;
 
-The user's persona, interests, location, free time slots, and recent calendar activity are in the payload below.
+    const cleanSystemPrompt = `You are Loop — a serendipity engine disguised as a calendar app.
 
-TASK: Search the web for 3 real upcoming events in the next 14 days in/near the user's city that match their personality and interests. Each event should feel personally chosen — like a friend who knows them well sent it.
+Your job: find ${isPremium ? '3 events' : 'ONE event'} happening in the next 7 days near ${userLocation.city} that will make this person think: "how did you know?"
 
-SEARCH STRATEGY:
-1. First search for events matching their strongest interests: ${interestHints.join(', ') || 'general culture and social events'}
-2. Then search for a wildcard — something outside their usual routine they'd still love
-3. Use Eventbrite, Meetup, Luma, local venue sites, and city event calendars
-4. Search with the user's specific city name + date range
+This isn't a recommendation. This is fate. You're the friend who always knows about the thing before anyone else does.
 
-EVENT SELECTION CRITERIA:
-- Must be REAL, VERIFIABLE, and CURRENTLY LISTED online (include source URL from search results)
-- Must be SPECIFIC: exact date, time, venue name, address
-- Must happen within the next 14 days from ${new Date(currentDate).toISOString().split('T')[0]}
-- Prefer events that are: ${budgetHint ? budgetHint.toLowerCase() + ' cost,' : ''} easy to attend solo or with one friend
-- AVOID: generic recurring classes, events that already happened, placeholder listings
-- DIVERSIFY: don't suggest 3 events of the same type — vary across categories
+THE USER:
+${archetypeProfile || personaSummary}
 
-RELEVANCE SCORING (be honest):
-- 0.9-1.0: Directly matches a stated interest + fits their schedule perfectly
-- 0.7-0.89: Related to their interests but not an exact match
-- 0.5-0.69: Wildcard — interesting stretch outside their comfort zone
-- Below 0.5: Don't include it
+THEIR INTERESTS: ${interestHints.join(', ')}
+${budgetHint ? `BUDGET: ${budgetHint}` : ''}
 
-TONE: Write each "why" like a friend texting them — casual, specific to THEIR persona, not generic.
+WHAT MAKES A "LOOP" EVENT:
+- The underground thing they'd never find on their own
+- The workshop that perfectly intersects two of their interests
+- The community event that connects them to their tribe
+- Something that makes them text a friend "you HAVE to come to this"
+- NOT: generic meetups, weekly classes, corporate conferences, anything with a logo wall
 
-Return as JSON array only:
-[
+${isPremium ? `Find exactly 3 events:
+1. THE ONE — the perfect, serendipitous match. This is the magic.
+2. THE STRETCH — something outside their comfort zone they'd secretly love
+3. THE SOCIAL — something they could bring a friend to` : `Find exactly 1 event — THE ONE. The perfect, serendipitous match.`}
+
+RULES:
+- MUST be REAL events found via web search with verifiable URLs
+- MUST happen within 7 days of ${currentDateStr}
+- Write each "why" like a friend texting them — warm, specific, personal
+- Include a "vibe" — one evocative word that captures the feeling
+- Be honest about cost and registration
+
+Return ONLY this JSON ${isPremium ? 'array' : 'object'}:
+${isPremium ? `[
   {
     "title": "Event name",
-    "description": "One sentence about the event itself",
     "date": "YYYY-MM-DD",
     "start_time": "HH:MM",
     "end_time": "HH:MM",
-    "location": "Venue Name, Full Address",
-    "why": "2-3 sentences explaining why THIS event is perfect for THIS person based on their specific interests/personality",
-    "link": "https://... (actual URL from search results)",
-    "category": "professional|social|cultural|fitness|learning|entertainment",
+    "location": "Venue, Full Address",
+    "why": "2-3 sentences — personal, warm, specific to THIS person",
+    "link": "https://real-source-url",
+    "category": "social|cultural|fitness|creative|learning|professional",
+    "vibe": "one word",
     "cost": "free|low|medium|high",
     "registration_required": true/false,
+    "pick_type": "the_one|the_stretch|the_social",
     "relevance_score": 0.0-1.0
   }
-]`;
+]` : `{
+  "title": "Event name",
+  "date": "YYYY-MM-DD",
+  "start_time": "HH:MM",
+  "end_time": "HH:MM",
+  "location": "Venue, Full Address",
+  "why": "2-3 sentences — personal, warm, specific to THIS person",
+  "link": "https://real-source-url",
+  "category": "social|cultural|fitness|creative|learning|professional",
+  "vibe": "one word",
+  "cost": "free|low|medium|high",
+  "registration_required": true/false,
+  "relevance_score": 0.0-1.0
+}`}`;
 
     // Calculate free time slots
     const calendarService = new CalendarService('dummy-token'); // We don't need auth for calculation
@@ -173,13 +193,13 @@ Return as JSON array only:
       current_date: currentDate,
     };
 
-    // Cheap default (gpt-4o-mini-search-preview) with app key; premium (gpt-5) when user provides key
+    // Free tier: gpt-4o-mini-search-preview (1 magic event); Premium: gpt-5 (3 picks)
     const defaultModel = process.env.OPENAI_RECOMMENDATIONS_MODEL_DEFAULT || 'gpt-4o-mini-search-preview';
     const premiumModel = process.env.OPENAI_RECOMMENDATIONS_MODEL || 'gpt-5';
-    const model = hasUserKey ? premiumModel : defaultModel;
+    const model = isPremium ? premiumModel : defaultModel;
     const promptId = process.env.OPENAI_RECOMMENDATIONS_PROMPT_ID;
 
-    console.log(`Recommendations: ${hasUserKey ? 'user key' : 'app key'}, model=${model}`);
+    console.log(`Recommendations: ${isPremium ? 'premium (user key)' : 'free (app key)'}, model=${model}`);
 
     const createParams: Parameters<typeof openai.responses.create>[0] = {
       model,
