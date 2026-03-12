@@ -1,71 +1,107 @@
-# Loop
+# Loop - One Magical Event in Your Calendar
 
-One magical event. Every week.
+## Summary
+Loop connects your Google Calendar to AI-powered web search. It learns your rhythms, interests, and free time, then finds exceptional events in your area and adds them directly to your calendar.
 
-Loop reads your Google Calendar, understands your life, and finds the one niche event you shouldn't miss this week — then adds it straight to your calendar.
+**One magical event in your calendar, powered by AI.**
 
-## How it works
+## Connect Your Calendar
 
-1. **Connect Google Calendar** — OAuth 2.0 with offline refresh tokens
-2. **Build your persona** — GPT-4o-mini analyzes your calendar patterns to understand who you are
-3. **Discover your event** — Perplexity web search finds candidates, GPT-4o picks the best match for you, URL gets verified
-4. **Add to calendar** — One tap and it's in your Google Calendar
+**Google Calendar** – Full integration: read events, add recommendations directly.  
+**iCal / ICS feed** – Paste a public calendar URL (e.g. from Google Calendar’s “Secret address in iCal format”). Recommendations are downloaded as an ICS file to import.
+
+## Key Features
+
+### 🧠 **Persona Generation**
+- GPT-4o analyzes your calendar patterns to create a unique personality profile
+- Identifies work-life balance, social patterns, and lifestyle insights
+- Powers personalized event recommendations
+
+### 📅 **Smart Event Recommendations**
+- GPT-5 with web search finds exceptional events in your area
+- Conflict detection marks events that don't fit your schedule as placeholders
+- Automatically adds compatible events to your calendar
+- One magical event per week, verifiable source URLs from web search
 
 ## Tech Stack
 
-- **Framework**: Next.js 15, React, TypeScript
-- **Styling**: Tailwind CSS
-- **Auth**: Google OAuth 2.0 with refresh token rotation
-- **AI**: OpenAI GPT-4o / GPT-4o-mini, Perplexity sonar-pro (via OpenRouter)
-- **Storage**: Upstash Redis
-- **Hosting**: Vercel with cron jobs
+- **Frontend**: Next.js 15, React, TypeScript, Tailwind CSS
+- **AI**: OpenAI GPT-4o (persona), GPT-5 (recommendations with web search)
+- **Authentication**: Google OAuth 2.0
 - **Calendar**: Google Calendar API
 
-## Setup
+## Get Started
 
-```bash
-npm install
-cp .env.example .env.local
-# Fill in your keys (see .env.example for details)
-npm run dev
-```
+1. **Clone and install**
+   ```bash
+   git clone https://github.com/Morkeeth/Loop.git
+   cd loop-labs-main
+   npm install
+   ```
 
-### Required env vars
+2. **Set up environment**
+   ```bash
+   cp env.example .env.local
+   ```
+   
+   Add your API keys to `.env.local`:
+   ```env
+   NEXT_PUBLIC_GOOGLE_CLIENT_ID=your_google_client_id
+   GOOGLE_CLIENT_SECRET=your_google_client_secret
+   GOOGLE_REDIRECT_URI=http://localhost:3000/api/auth/callback
+   OPENAI_API_KEY=your_openai_api_key
+   ```
 
-- `NEXT_PUBLIC_GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` — Google OAuth
-- `GOOGLE_REDIRECT_URI` — OAuth callback URL
-- `OPENAI_API_KEY` — Persona generation + event curation
-- `OPENROUTER_API_KEY` — Perplexity web search for event discovery
-- `CRON_SECRET` — Protects the weekly cron endpoint
+3. **Run locally**
+   ```bash
+   npm run dev
+   ```
+   
+   Open `http://localhost:3000` (or the port shown in terminal)
+
+## API Endpoints
+
+- `GET /api/calendar` - Fetch calendar events
+- `POST /api/calendar` - Create single event
+- `POST /api/calendar/events` - Bulk-add recommended events to calendar
+- `POST /api/persona` - Generate AI persona from calendar
+- `POST /api/recommendations` - Find exceptional events with GPT-5 web search
+
+## User Flow
+
+1. **Connect Calendar** - Secure Google OAuth authentication
+2. **AI Analysis** - GPT-4o creates your personality profile from calendar patterns
+3. **Smart Recommendations** - GPT-5 with web search finds exceptional events in your area
+4. **Add to Calendar** - Compatible events are automatically added to your Google Calendar
 
 ## Project Structure
 
 ```
-app/
-├── api/
-│   ├── auth/callback/    # Google OAuth callback
-│   ├── auth/session/     # Session management + token refresh
-│   ├── calendar/         # Calendar data fetching
-│   ├── persona/          # Persona generation
-│   ├── discover/         # Event discovery
-│   ├── user/persona/     # Persist persona to KV
-│   └── cron/discover/    # Weekly automated discovery
-├── dashboard/            # Main app (persona + discover + add to cal)
-├── explore/              # No-auth discovery flow
-├── privacy/              # Privacy policy
-├── terms/                # Terms of service
-└── page.tsx              # Landing page
-lib/
-├── calendar-service.ts   # Google Calendar API wrapper
-├── discover.ts           # Multi-step event discovery pipeline
-├── google-auth.ts        # OAuth + refresh token helpers
-└── kv-store.ts           # Upstash Redis user persistence
+loop-labs-main/
+├── app/
+│   ├── api/
+│   │   ├── auth/             # Google OAuth
+│   │   ├── calendar/         # Calendar read & write
+│   │   ├── persona/          # AI persona generation
+│   │   └── recommendations/  # GPT-5 event recommendations
+│   ├── dashboard/            # Main pipeline UI
+│   └── page.tsx              # Landing page
+├── components/
+├── lib/
+└── types/
 ```
 
-## Weekly Cron
+## Privacy & Security
 
-Every Monday at 9am UTC, the cron job (`/api/cron/discover`) iterates all stored users, refreshes their tokens, discovers a personalized event, and adds it to their calendar.
+- Secure Google OAuth 2.0 authentication
+- Calendar data processed for persona and recommendations only
+- No data stored permanently
+- API keys and credentials via `.env.local` (never commit)
 
 ## License
 
-MIT
+MIT License - see [LICENSE](LICENSE) for details.
+
+---
+
+**Built with Next.js, OpenAI, and Google Calendar API**

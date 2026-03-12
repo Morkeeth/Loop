@@ -396,5 +396,96 @@ Rules:
     }
   }
 
+  /**
+   * Calculate free time slots for the next 4 weeks for event recommendations.
+   */
+  calculateFreeTimeSlotsForRecommendations(
+    events: CalendarEvent[],
+    persona: any,
+    currentDate: string = new Date().toISOString()
+  ): Array<{
+    date: string;
+    start_time: string;
+    end_time: string;
+    duration_minutes: number;
+    weekday: string;
+  }> {
+    const now = new Date(currentDate);
+
+    const freeSlots: Array<{
+      date: string;
+      start_time: string;
+      end_time: string;
+      duration_minutes: number;
+      weekday: string;
+    }> = [];
+
+    const typicalStart = persona?.profile?.typical_day_start_local || '09:00';
+    const typicalEnd = persona?.profile?.typical_day_end_local || '22:00';
+    const quietHours = persona?.profile?.quiet_hours || '23:00-07:00';
+    const [quietStart] = quietHours.split('-');
+
+    for (let i = 0; i < 28; i++) {
+      const date = new Date(now.getTime() + i * 24 * 60 * 60 * 1000);
+      const dateStr = date.toISOString().split('T')[0];
+      const weekday = date.toLocaleDateString('en-US', { weekday: 'long' });
+
+      const dayEvents = events.filter((event) => {
+        const eventDate = event.start.dateTime
+          ? new Date(event.start.dateTime).toISOString().split('T')[0]
+          : event.start.date;
+        return eventDate === dateStr;
+      });
+
+      dayEvents.sort((a, b) => {
+        const aTime = a.start.dateTime || a.start.date || '';
+        const bTime = b.start.dateTime || b.start.date || '';
+        return new Date(aTime).getTime() - new Date(bTime).getTime();
+      });
+
+      const gaps = [];
+      let lastEndTime = typicalStart;
+
+      for (const event of dayEvents) {
+        // All-day events block the entire active window
+        const isAllDay = !event.start.dateTime && event.start.date;
+        const eventStart = isAllDay
+          ? typicalStart
+          : new Date(event.start.dateTime!).toTimeString().slice(0, 5);
+
+        if (eventStart > lastEndTime) {
+          const duration = this.timeDiffInMinutes(lastEndTime, eventStart);
+          if (duration >= 60) {
+            gaps.push({ date: dateStr, start_time: lastEndTime, end_time: eventStart, duration_minutes: duration, weekday });
+          }
+        }
+
+        const eventEnd = isAllDay
+          ? typicalEnd
+          : new Date(event.end.dateTime!).toTimeString().slice(0, 5);
+
+        if (eventEnd > lastEndTime) lastEndTime = eventEnd;
+      }
+
+      // Gap after last event
+      if (lastEndTime < quietStart) {
+        const duration = this.timeDiffInMinutes(lastEndTime, quietStart);
+        if (duration >= 60) {
+          gaps.push({ date: dateStr, start_time: lastEndTime, end_time: quietStart, duration_minutes: duration, weekday });
+        }
+      }
+
+      freeSlots.push(...gaps);
+    }
+
+    return freeSlots;
+  }
+
+  private timeDiffInMinutes(start: string, end: string): number {
+    const [sh, sm] = start.split(':').map(Number);
+    const [eh, em] = end.split(':').map(Number);
+    return (eh * 60 + em) - (sh * 60 + sm);
+  }
+
 }
 
