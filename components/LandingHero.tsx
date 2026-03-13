@@ -46,33 +46,33 @@ export default function LandingHero() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col px-6">
+    <div className="min-h-screen flex flex-col px-4 sm:px-6">
       {/* Header */}
       <header className="fixed top-0 left-0 right-0 z-20 backdrop-blur-md bg-white/80 border-b border-black/10">
-        <div className="px-6 py-4">
+        <div className="px-4 sm:px-6 py-3 sm:py-4">
           <div className="flex items-center space-x-2">
-            <svg className="w-6 h-6" viewBox="0 0 23.5703 21.5332" fill="black">
+            <svg className="w-5 h-5 sm:w-6 sm:h-6" viewBox="0 0 23.5703 21.5332" fill="black">
               <path d="M7.61523 7.28711C9.63867 7.28711 11.2656 5.64648 11.2656 3.63672C11.2656 1.62695 9.63867 0 7.61523 0C5.60547 0 3.97852 1.62695 3.97852 3.63672C3.97852 5.64648 5.60547 7.28711 7.61523 7.28711ZM7.61523 5.30469C6.69922 5.30469 5.94727 4.55273 5.94727 3.63672C5.94727 2.7207 6.69922 1.96875 7.61523 1.96875C8.54492 1.96875 9.29688 2.7207 9.29688 3.63672C9.29688 4.55273 8.54492 5.30469 7.61523 5.30469ZM15.5996 7.28711C17.6094 7.28711 19.2363 5.64648 19.2363 3.63672C19.2363 1.62695 17.6094 0 15.5996 0C13.5898 0 11.9492 1.62695 11.9492 3.63672C11.9492 5.64648 13.5898 7.28711 15.5996 7.28711ZM15.5996 5.30469C14.6836 5.30469 13.9316 4.55273 13.9316 3.63672C13.9316 2.7207 14.6836 1.96875 15.5996 1.96875C16.5156 1.96875 17.2676 2.7207 17.2676 3.63672C17.2676 4.55273 16.5156 5.30469 15.5996 5.30469ZM3.65039 14.4102C5.66016 14.4102 7.28711 12.7695 7.28711 10.7598C7.28711 8.75 5.66016 7.10938 3.65039 7.10938C1.62695 7.10938 0 8.75 0 10.7598C0 12.7695 1.62695 14.4102 3.65039 14.4102ZM3.65039 12.4277C2.7207 12.4277 1.96875 11.6758 1.96875 10.7598C1.96875 9.84375 2.7207 9.0918 3.65039 9.0918C4.56641 9.0918 5.31836 9.84375 5.31836 10.7598C5.31836 11.6758 4.56641 12.4277 3.65039 12.4277ZM19.5781 14.4102C21.5879 14.4102 23.2148 12.7695 23.2148 10.7598C23.2148 8.75 21.5879 7.10938 19.5781 7.10938C17.5684 7.10938 15.9277 8.75 15.9277 10.7598C15.9277 12.7695 17.5684 14.4102 19.5781 14.4102ZM19.5781 12.4277C18.6484 12.4277 17.8965 11.6758 17.8965 10.7598C17.8965 9.84375 18.6484 9.0918 19.5781 9.0918C20.4941 9.0918 21.2461 9.84375 21.2461 10.7598C21.2461 11.6758 20.4941 12.4277 19.5781 12.4277ZM7.61523 21.5332C9.63867 21.5332 11.2656 19.9062 11.2656 17.8965C11.2656 15.8867 9.63867 14.2461 7.61523 14.2461C5.60547 14.2461 3.97852 15.8867 3.97852 17.8965C3.97852 19.9062 5.60547 21.5332 7.61523 21.5332ZM7.61523 19.5645C6.69922 19.5645 5.94727 18.8125 5.94727 17.8965C5.94727 16.9805 6.69922 16.2285 7.61523 16.2285C8.54492 16.2285 9.29688 16.9805 9.29688 17.8965C9.29688 18.8125 8.54492 19.5645 7.61523 19.5645ZM15.5996 21.5332C17.6094 21.5332 19.2363 19.9062 19.2363 17.8965C19.2363 15.8867 17.6094 14.2461 15.5996 14.2461C13.5898 14.2461 11.9492 15.8867 11.9492 17.8965C11.9492 19.9062 13.5898 21.5332 15.5996 21.5332ZM15.5996 19.5645C14.6836 19.5645 13.9316 18.8125 13.9316 17.8965C13.9316 16.9805 14.6836 16.2285 15.5996 16.2285C16.5156 16.2285 17.2676 16.9805 17.2676 17.8965C17.2676 18.8125 16.5156 19.5645 15.5996 19.5645Z"/>
             </svg>
-            <span className="text-xl font-bold text-black">Loop</span>
+            <span className="text-lg sm:text-xl font-bold text-black">Loop</span>
           </div>
         </div>
       </header>
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col items-center justify-center pt-20 pb-16">
-        <div className="text-center max-w-lg space-y-8">
-          <div className="space-y-4">
-            <h1 className="text-5xl md:text-6xl font-bold text-black leading-[1.1]">
+      <div className="flex-1 flex flex-col items-center justify-center pt-16 sm:pt-20 pb-12 sm:pb-16">
+        <div className="text-center max-w-lg space-y-6 sm:space-y-8">
+          <div className="space-y-3 sm:space-y-4">
+            <h1 className="text-3xl sm:text-5xl md:text-6xl font-bold text-black leading-[1.1]">
               One magical event.<br />
               Every week.
             </h1>
-            <p className="text-lg text-gray-500 max-w-sm mx-auto">
+            <p className="text-base sm:text-lg text-gray-500 max-w-sm mx-auto px-2">
               Loop reads your calendar, understands your life, and finds the one thing you shouldn't miss this week.
             </p>
           </div>
 
-          <div className="space-y-3">
+          <div className="space-y-3 px-2 sm:px-0">
             <button
               onClick={handleGoogleAuth}
               disabled={isLoading}
@@ -90,9 +90,9 @@ export default function LandingHero() {
             <button
               onClick={handleTwitterAuth}
               disabled={isLoadingTwitter}
-              className="w-full max-w-sm mx-auto flex items-center justify-center gap-3 px-8 py-4 text-base font-bold border-2 border-black/20 bg-white text-black hover:bg-black hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full max-w-sm mx-auto flex items-center justify-center gap-3 px-6 sm:px-8 py-3.5 sm:py-4 text-sm sm:text-base font-bold border-2 border-black/20 bg-white text-black hover:bg-black hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+              <svg className="w-4 h-4 sm:w-5 sm:h-5" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
               </svg>
               <span>{isLoadingTwitter ? 'Connecting...' : 'or connect with X'}</span>
@@ -100,13 +100,13 @@ export default function LandingHero() {
 
             <button
               onClick={() => router.push('/setup')}
-              className="block mx-auto text-sm text-gray-400 hover:text-black transition-colors"
+              className="block mx-auto text-sm text-gray-400 hover:text-black transition-colors py-2"
             >
-              No calendar? Try it anyway →
+              No calendar? Pick your archetype →
             </button>
           </div>
 
-          <p className="text-xs text-gray-300 max-w-xs mx-auto">
+          <p className="text-xs text-gray-300 max-w-xs mx-auto px-4">
             We read your calendar to understand your vibe. Nothing is stored on our servers.
           </p>
 
