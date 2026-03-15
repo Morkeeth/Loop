@@ -289,7 +289,7 @@ export default function ExplorePage() {
                 onClick={() => setShowEmailCapture(true)}
                 className="text-sm text-gray-400 hover:text-black transition-colors mt-4"
               >
-                Get an event like this every week →
+                Get daily briefings like this →
               </button>
             )}
             {showEmailCapture && !emailSaved && (
@@ -310,7 +310,7 @@ export default function ExplorePage() {
             )}
             {emailSaved && (
               <p className="text-sm text-gray-400 mt-4">
-                You're in. One event, every week, for {city}.
+                You're in. Daily briefings for {city}, starting tomorrow.
               </p>
             )}
           </div>

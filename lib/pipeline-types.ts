@@ -53,7 +53,7 @@ export const STEP_DESCRIPTIONS: Record<PipelineStepId, string[]> = {
     'Matching events to your interests and vibe',
     'Filtering for something truly special',
     'Found something — checking the details',
-    'Curating your one magical event',
+    'Curating your daily briefing',
   ],
   event: [
     'Adding the event to your calendar',

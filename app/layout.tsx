@@ -8,8 +8,8 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Loop — One magical event, every week",
-  description: "Loop reads your calendar, understands your vibe, and finds the one thing you shouldn't miss this week.",
+  title: "Loop — Your daily briefing, powered by your calendar",
+  description: "Loop reads your Google Calendar, builds your persona, and delivers a daily morning briefing with relevant news, local events, and activity suggestions.",
 };
 
 export default function RootLayout({

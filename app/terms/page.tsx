@@ -15,9 +15,10 @@ export default function TermsOfService() {
         <section>
           <h2 className="text-lg font-semibold text-black mb-2">What Loop provides</h2>
           <p>
-            Loop is an event discovery service. It reads your Google Calendar to understand your
-            interests and recommends one event per week. Loop may also add recommended events to
-            your Google Calendar.
+            Loop is a personalized briefing service. It reads your Google Calendar events from the
+            past 3–6 months to build your persona using AI, then delivers a daily morning briefing
+            with relevant news, local events, and activity suggestions. Loop may also add suggested
+            events to your Google Calendar with your explicit consent.
           </p>
         </section>
 

@@ -54,7 +54,7 @@ export function ModelSettings({ isOpen, onClose }: ModelSettingsProps) {
         </div>
 
         <p className="text-xs text-gray-500">
-          Bring your own API key to use heavier models for event discovery. Your key stays in your browser — never sent to our server.
+          Bring your own API key to use heavier models for your briefing. Your key stays in your browser — never sent to our server.
         </p>
 
         {/* Provider */}
