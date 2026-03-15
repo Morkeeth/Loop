@@ -272,7 +272,7 @@ export default function LoopPage() {
                   <p className="text-sm font-mono tracking-widest uppercase text-muted mb-4">01 — CONNECT</p>
                   <h1 className="text-3xl font-light mb-6">Connect your calendar</h1>
                   <p className="text-muted mb-12 max-w-md mx-auto">
-                    Loop reads your calendar to understand who you are. Then finds one magical event, just for you, every week.
+                    Loop reads your calendar to understand who you are. Then delivers a daily briefing with news, events, and suggestions tailored to you.
                   </p>
                   <button onClick={connectCalendar} className="google-button">
                     <svg width="18" height="18" viewBox="0 0 18 18" fill="none">

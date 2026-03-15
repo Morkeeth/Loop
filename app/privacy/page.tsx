@@ -8,34 +8,39 @@ export default function PrivacyPolicy() {
         <section>
           <h2 className="text-lg font-semibold text-black mb-2">What Loop does</h2>
           <p>
-            Loop connects to your Google Calendar to understand your interests and lifestyle.
-            It uses this information to find one personalized event recommendation for you each week.
+            Loop reads your Google Calendar events from the past 3–6 months to build a personalized
+            profile (persona) using AI. This persona is used to generate a daily morning briefing
+            with relevant news, local events, and activity suggestions tailored to your schedule and interests.
           </p>
         </section>
 
         <section>
-          <h2 className="text-lg font-semibold text-black mb-2">Data we access</h2>
+          <h2 className="text-lg font-semibold text-black mb-2">Google API Scopes</h2>
+          <p className="mb-2">Loop requests the following Google API permissions:</p>
           <ul className="list-disc pl-5 space-y-1">
-            <li>Your Google Calendar events (read-only access to event titles, times, and locations)</li>
-            <li>Your Google profile name and email address</li>
+            <li><strong>calendar.readonly</strong> — Read access to your calendar events (titles, times, locations, and attendees) to build your personalized profile</li>
+            <li><strong>calendar.events</strong> — Write access to create events on your calendar when you choose to add a suggested event</li>
+            <li><strong>userinfo.profile</strong> — Your name for account identification</li>
           </ul>
         </section>
 
         <section>
           <h2 className="text-lg font-semibold text-black mb-2">How we use your data</h2>
           <ul className="list-disc pl-5 space-y-1">
-            <li>Calendar data is processed in real-time to build your interest profile</li>
-            <li>Your profile is used to find a relevant event recommendation</li>
-            <li>Discovered events may be added to your Google Calendar with your permission</li>
+            <li>Calendar data from the past 3–6 months is read to build a personalized profile (persona) using AI</li>
+            <li>Your persona powers a daily morning briefing with relevant news, local events, and activity suggestions</li>
+            <li>Suggested events are added to your Google Calendar only with your explicit consent</li>
+            <li>Calendar read access requires full event details (titles, times, locations) — limited scopes like FreeBusy would not provide enough information for persona generation</li>
           </ul>
         </section>
 
         <section>
           <h2 className="text-lg font-semibold text-black mb-2">Data storage</h2>
           <p>
-            Loop does not store your calendar data on our servers. Your data is processed
-            in-session and cached locally in your browser. You can clear this cache at any time
-            by clearing your browser data.
+            Your raw calendar data is not permanently stored on our servers. Calendar events are
+            processed in real-time to generate your profile. Your generated profile and authentication
+            tokens are stored securely using encrypted cloud storage (Supabase) to enable
+            daily automated briefings. You can delete your data at any time by revoking access.
           </p>
         </section>
 

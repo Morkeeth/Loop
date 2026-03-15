@@ -64,11 +64,11 @@ export default function LandingHero() {
         <div className="text-center max-w-lg space-y-6 sm:space-y-8">
           <div className="space-y-3 sm:space-y-4">
             <h1 className="text-3xl sm:text-5xl md:text-6xl font-bold text-black leading-[1.1]">
-              One magical event.<br />
-              Every week.
+              Your morning briefing.<br />
+              Powered by your calendar.
             </h1>
             <p className="text-base sm:text-lg text-gray-500 max-w-sm mx-auto px-2">
-              Loop reads your calendar, understands your life, and finds the one thing you shouldn't miss this week.
+              Loop reads your calendar, builds your persona, and delivers a daily briefing with news, local events, and suggestions tailored to you.
             </p>
           </div>
 
@@ -106,8 +106,19 @@ export default function LandingHero() {
             </button>
           </div>
 
+          {/* How it works — required for Google OAuth verification */}
+          <div className="text-left max-w-sm mx-auto space-y-3 text-sm text-gray-500 px-4 sm:px-0">
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-400">How it works</h2>
+            <ol className="list-decimal pl-5 space-y-2">
+              <li>Connect your Google Calendar (read access to event titles, times, locations, and attendees)</li>
+              <li>Loop reads the past 3–6 months to build a personalized profile (persona) using AI</li>
+              <li>Every morning, Loop delivers a briefing with relevant news, local events, and activity suggestions</li>
+              <li>With your consent, suggested events can be added to your Google Calendar</li>
+            </ol>
+          </div>
+
           <p className="text-xs text-gray-300 max-w-xs mx-auto px-4">
-            We read your calendar to understand your vibe. Nothing is stored on our servers.
+            Your calendar data is processed in real-time and is not stored on our servers.
           </p>
 
           <div className="flex items-center justify-center gap-4 text-xs text-gray-300">
