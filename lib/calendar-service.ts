@@ -372,28 +372,62 @@ Rules:
     return events.map(event => this.processEvent(event));
   }
 
-  async createEvent(eventData: Partial<CalendarEvent>): Promise<CalendarEvent> {
-    try {
-      const response = await fetch(
-        'https://www.googleapis.com/calendar/v3/calendars/primary/events',
-        {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${this.accessToken}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(eventData),
-        }
-      );
+  /**
+   * Find or create a dedicated "Loop" calendar for discovered events.
+   * Returns the calendar ID.
+   */
+  async getOrCreateLoopCalendar(): Promise<string> {
+    // Check existing calendars for one named "Loop"
+    const calendars = await this.fetchCalendarList();
+    const existing = calendars.find(
+      (cal: any) => cal.summary === 'Loop' && cal.accessRole === 'owner'
+    );
+    if (existing) return existing.id;
 
-      if (!response.ok) {
-        throw new Error(`Failed to create event: ${response.status}`);
+    // Create a new calendar
+    const response = await fetch(
+      'https://www.googleapis.com/calendar/v3/calendars',
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${this.accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          summary: 'Loop',
+          description: 'Events discovered by Loop — your serendipity engine',
+          timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        }),
       }
+    );
 
-      return await response.json();
-    } catch (error) {
-      throw error;
+    if (!response.ok) {
+      // Fallback to primary if calendar creation fails
+      return 'primary';
     }
+
+    const calendar = await response.json();
+    return calendar.id;
+  }
+
+  async createEvent(eventData: Partial<CalendarEvent>, calendarId: string = 'primary'): Promise<CalendarEvent> {
+    const response = await fetch(
+      `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${this.accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(eventData),
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(`Failed to create event: ${response.status}`);
+    }
+
+    return await response.json();
   }
 
   /**

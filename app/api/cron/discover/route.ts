@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAllUserIds, getUser, updateUser } from '@/lib/kv-store';
+import { getAllUserIds, getUser, updateUser, getFeedback } from '@/lib/kv-store';
 import { refreshAccessToken } from '@/lib/google-auth';
 import { discoverEvent } from '@/lib/discover';
 import { CalendarService } from '@/lib/calendar-service';
@@ -36,9 +36,21 @@ export async function GET(request: NextRequest) {
         },
       };
 
-      const { event } = await discoverEvent(persona);
+      // Load feedback to personalize picks
+      let feedbackSignals: { liked: string[]; disliked: string[] } | undefined;
+      try {
+        const history = await getFeedback(userId);
+        if (history.length > 0) {
+          feedbackSignals = {
+            liked: history.filter(f => f.feedback === 'up').map(f => `${f.eventTitle} (${f.category})`).slice(0, 10),
+            disliked: history.filter(f => f.feedback === 'down').map(f => `${f.eventTitle} (${f.category})`).slice(0, 10),
+          };
+        }
+      } catch {}
 
-      // Add event to user's calendar
+      const { event } = await discoverEvent(persona, { feedback: feedbackSignals });
+
+      // Add event to user's dedicated Loop calendar
       const calendarService = new CalendarService(tokens.access_token);
       const tz = user.timezone || 'UTC';
       const start = new Date(`${event.date}T${event.time}:00`);
@@ -55,13 +67,24 @@ export async function GET(request: NextRequest) {
         'Found by Loop',
       ].filter(Boolean).join('\n');
 
+      // Use dedicated Loop calendar, or create one
+      let loopCalendarId = user.loop_calendar_id || 'primary';
+      if (loopCalendarId === 'primary' || !user.loop_calendar_id) {
+        try {
+          loopCalendarId = await calendarService.getOrCreateLoopCalendar();
+          if (loopCalendarId !== 'primary') {
+            await updateUser(userId, { loop_calendar_id: loopCalendarId } as any);
+          }
+        } catch {}
+      }
+
       await calendarService.createEvent({
         summary: event.event_title,
         location: event.address || event.venue,
         description: desc,
         start: { dateTime: start.toISOString(), timeZone: tz },
         end: { dateTime: end.toISOString(), timeZone: tz },
-      } as any);
+      } as any, loopCalendarId);
 
       await updateUser(userId, { last_event_at: new Date().toISOString() });
       results.push({ userId, status: 'success', event: event.event_title });

@@ -16,6 +16,7 @@ export interface LoopUser {
   tags: string[];        // merged interest/fitness/local tags
   persona: any | null;   // cached persona JSON
   last_event_at: string | null;  // ISO date of last discovered event
+  loop_calendar_id: string | null; // dedicated Loop calendar on user's Google account
   created_at: string;
   updated_at: string;
 }
