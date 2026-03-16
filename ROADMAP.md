@@ -13,12 +13,8 @@
 
 ### Notifications — the retention mechanism
 Without notifications, the weekly cron job finds events that nobody sees.
-- [ ] Email notification when weekly event is discovered
-  - Use Resend or Postmark (transactional email)
-  - Template: event card + one-click "Remove from calendar" link
-  - Respect timezone for send time
-- [ ] Add email field to user profile (pull from Google profile or ask)
-- [ ] Unsubscribe link in every email (CAN-SPAM / GDPR)
+- [x] Dedicated "Loop" calendar — events land in their own subscribable calendar on the user's Google account, with native Google Calendar notifications
+- [ ] Optional: email digest when weekly event is discovered (Resend/Postmark)
 - [ ] Optional: push notifications via web push API
 
 ## P1 — Core product quality
@@ -108,4 +104,6 @@ Redis works but is fragile for user data:
 - [x] Cleaned up explore page fake email capture
 - [x] Added event feedback API endpoint + thumbs up/down UI
 - [x] Wired feedback history into discovery prompts (pick step uses liked/disliked signals)
+- [x] Dedicated "Loop" calendar — events go to their own calendar instead of primary, Google handles notifications natively
+- [x] Cron job also uses Loop calendar + feedback signals
 - [x] Net: ~1,000 lines deleted, cleaner codebase

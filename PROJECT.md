@@ -62,7 +62,7 @@ Explore (/explore) → Auto-detect city → Event discovery (no auth needed)
 2. **Pick** — GPT-4o selects the best match based on persona
 3. **Verify** — HEAD/GET request to event URL confirms it's live
 4. **Fallback** — If URL dead, swaps with a verified candidate URL
-5. **Calendar** — Creates event via Google Calendar API
+5. **Calendar** — Creates event in dedicated "Loop" calendar via Google Calendar API (auto-created on first use)
 
 ## Environment variables
 

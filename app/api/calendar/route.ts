@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { CalendarService } from '@/lib/calendar-service';
+import { getUser, updateUser } from '@/lib/kv-store';
 
 type NormalizedEvent = ReturnType<typeof normalizeEvent>;
 
@@ -129,7 +130,25 @@ export async function POST(request: NextRequest) {
     }
 
     const calendarService = new CalendarService(accessToken);
-    const newEvent = await calendarService.createEvent(eventData);
+
+    // Use dedicated Loop calendar if available, or create one
+    const userId = request.cookies.get('loop_user_id')?.value;
+    let loopCalendarId = 'primary';
+    if (userId) {
+      try {
+        const user = await getUser(userId);
+        if (user?.loop_calendar_id) {
+          loopCalendarId = user.loop_calendar_id;
+        } else {
+          loopCalendarId = await calendarService.getOrCreateLoopCalendar();
+          if (loopCalendarId !== 'primary') {
+            updateUser(userId, { loop_calendar_id: loopCalendarId } as any).catch(() => {});
+          }
+        }
+      } catch {}
+    }
+
+    const newEvent = await calendarService.createEvent(eventData, loopCalendarId);
 
     return NextResponse.json({ success: true, event: newEvent });
   } catch (error) {
