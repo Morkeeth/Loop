@@ -8,6 +8,24 @@ export default function LandingHero() {
   const [isLoadingTwitter, setIsLoadingTwitter] = useState(false);
   const router = useRouter();
 
+  const handleTwitterAuth = async () => {
+    setIsLoadingTwitter(true);
+    try {
+      const { createClient } = await import('@/lib/supabase/client');
+      const supabase = createClient();
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'twitter',
+        options: {
+          redirectTo: `${window.location.origin}/auth/callback?next=/dashboard`,
+        },
+      });
+      if (error) throw error;
+    } catch (err) {
+      console.error('Auth error:', err);
+      setIsLoadingTwitter(false);
+    }
+  };
+
   const handleGoogleAuth = async () => {
     setIsLoading(true);
     try {
@@ -24,24 +42,6 @@ export default function LandingHero() {
     } catch (err) {
       console.error('Auth error:', err);
       setIsLoading(false);
-    }
-  };
-
-  const handleTwitterAuth = async () => {
-    setIsLoadingTwitter(true);
-    try {
-      const { createClient } = await import('@/lib/supabase/client');
-      const supabase = createClient();
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'twitter',
-        options: {
-          redirectTo: `${window.location.origin}/auth/callback?next=/dashboard`,
-        },
-      });
-      if (error) throw error;
-    } catch (err) {
-      console.error('Auth error:', err);
-      setIsLoadingTwitter(false);
     }
   };
 
@@ -64,11 +64,11 @@ export default function LandingHero() {
         <div className="text-center max-w-lg space-y-6 sm:space-y-8">
           <div className="space-y-3 sm:space-y-4">
             <h1 className="text-3xl sm:text-5xl md:text-6xl font-bold text-black leading-[1.1]">
-              Your morning briefing.<br />
-              Powered by your calendar.
+              One magical event.<br />
+              Every week.
             </h1>
             <p className="text-base sm:text-lg text-gray-500 max-w-sm mx-auto px-2">
-              Loop reads your calendar, builds your persona, and delivers a daily briefing with news, local events, and suggestions tailored to you.
+              Loop reads your calendar, builds your persona, and finds the one event you'd never discover on your own.
             </p>
           </div>
 
@@ -112,8 +112,8 @@ export default function LandingHero() {
             <ol className="list-decimal pl-5 space-y-2">
               <li>Connect your Google Calendar (read access to event titles, times, locations, and attendees)</li>
               <li>Loop reads the past 3–6 months to build a personalized profile (persona) using AI</li>
-              <li>Every morning, Loop delivers a briefing with relevant news, local events, and activity suggestions</li>
-              <li>With your consent, suggested events can be added to your Google Calendar</li>
+              <li>Every week, Loop searches the web for one niche, real event tailored to your interests and city</li>
+              <li>With your consent, the event is added to your Google Calendar automatically</li>
             </ol>
           </div>
 

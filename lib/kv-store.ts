@@ -51,4 +51,29 @@ export async function getAllUserIds(): Promise<string[]> {
   return redis.smembers('users');
 }
 
+// --- Event feedback ---
+
+export interface EventFeedback {
+  userId: string;
+  eventTitle: string;
+  category: string;
+  feedback: 'up' | 'down';
+  timestamp: string;
+}
+
+function feedbackKey(userId: string) {
+  return `feedback:${userId}`;
+}
+
+export async function saveFeedback(userId: string, feedback: EventFeedback): Promise<void> {
+  await redis.lpush(feedbackKey(userId), JSON.stringify(feedback));
+  // Keep only last 50 feedback entries
+  await redis.ltrim(feedbackKey(userId), 0, 49);
+}
+
+export async function getFeedback(userId: string): Promise<EventFeedback[]> {
+  const raw = await redis.lrange(feedbackKey(userId), 0, 49);
+  return raw.map((entry: any) => typeof entry === 'string' ? JSON.parse(entry) : entry);
+}
+
 export { redis };

@@ -2,15 +2,15 @@ export default function PrivacyPolicy() {
   return (
     <div className="min-h-screen bg-white text-black px-6 py-16 max-w-2xl mx-auto">
       <h1 className="text-3xl font-bold mb-8">Privacy Policy</h1>
-      <p className="text-sm text-gray-400 mb-8">Last updated: March 9, 2026</p>
+      <p className="text-sm text-gray-400 mb-8">Last updated: March 16, 2026</p>
 
       <div className="space-y-6 text-sm text-gray-700 leading-relaxed">
         <section>
           <h2 className="text-lg font-semibold text-black mb-2">What Loop does</h2>
           <p>
             Loop reads your Google Calendar events from the past 3–6 months to build a personalized
-            profile (persona) using AI. This persona is used to generate a daily morning briefing
-            with relevant news, local events, and activity suggestions tailored to your schedule and interests.
+            profile (persona) using AI. This persona is used to find one niche, real event each week
+            tailored to your interests and city. With your consent, the event is added to your Google Calendar.
           </p>
         </section>
 
@@ -28,7 +28,7 @@ export default function PrivacyPolicy() {
           <h2 className="text-lg font-semibold text-black mb-2">How we use your data</h2>
           <ul className="list-disc pl-5 space-y-1">
             <li>Calendar data from the past 3–6 months is read to build a personalized profile (persona) using AI</li>
-            <li>Your persona powers a daily morning briefing with relevant news, local events, and activity suggestions</li>
+            <li>Your persona is used to find one personalized event recommendation each week</li>
             <li>Suggested events are added to your Google Calendar only with your explicit consent</li>
             <li>Calendar read access requires full event details (titles, times, locations) — limited scopes like FreeBusy would not provide enough information for persona generation</li>
           </ul>
@@ -40,7 +40,7 @@ export default function PrivacyPolicy() {
             Your raw calendar data is not permanently stored on our servers. Calendar events are
             processed in real-time to generate your profile. Your generated profile and authentication
             tokens are stored securely using encrypted cloud storage (Supabase) to enable
-            daily automated briefings. You can delete your data at any time by revoking access.
+            weekly automated event recommendations. You can delete your data at any time by revoking access.
           </p>
         </section>
 

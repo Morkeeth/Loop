@@ -2,7 +2,7 @@ export default function TermsOfService() {
   return (
     <div className="min-h-screen bg-white text-black px-6 py-16 max-w-2xl mx-auto">
       <h1 className="text-3xl font-bold mb-8">Terms of Service</h1>
-      <p className="text-sm text-gray-400 mb-8">Last updated: March 9, 2026</p>
+      <p className="text-sm text-gray-400 mb-8">Last updated: March 16, 2026</p>
 
       <div className="space-y-6 text-sm text-gray-700 leading-relaxed">
         <section>
@@ -15,10 +15,10 @@ export default function TermsOfService() {
         <section>
           <h2 className="text-lg font-semibold text-black mb-2">What Loop provides</h2>
           <p>
-            Loop is a personalized briefing service. It reads your Google Calendar events from the
-            past 3–6 months to build your persona using AI, then delivers a daily morning briefing
-            with relevant news, local events, and activity suggestions. Loop may also add suggested
-            events to your Google Calendar with your explicit consent.
+            Loop is a personalized event discovery service. It reads your Google Calendar events from the
+            past 3–6 months to build your persona using AI, then finds one niche, real event each week
+            tailored to your interests and city. With your consent, the event is added to your
+            Google Calendar.
           </p>
         </section>
 

@@ -18,9 +18,6 @@ export default function ExplorePage() {
   const [discoveredEvent, setDiscoveredEvent] = useState<DiscoveredEvent | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [searchPhase, setSearchPhase] = useState('');
-  const [showEmailCapture, setShowEmailCapture] = useState(false);
-  const [email, setEmail] = useState('');
-  const [emailSaved, setEmailSaved] = useState(false);
   const [detectingLocation, setDetectingLocation] = useState(true);
 
   // Auto-detect city on mount
@@ -82,7 +79,6 @@ export default function ExplorePage() {
     setIsSearching(true);
     setError(null);
     setDiscoveredEvent(null);
-    setShowEmailCapture(false);
 
     let phaseIndex = 0;
     setSearchPhase(SEARCH_PHASES[1]); // skip location phase since we already have it
@@ -131,15 +127,6 @@ export default function ExplorePage() {
       setIsSearching(false);
     }
   }, [city, isSearching]);
-
-  const handleSaveEmail = () => {
-    if (!email.trim()) return;
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('loopEmail', email.trim());
-      localStorage.setItem('loopCity', city || '');
-    }
-    setEmailSaved(true);
-  };
 
   // --- Detecting / Searching state ---
   if (detectingLocation || isSearching) {
@@ -282,37 +269,12 @@ export default function ExplorePage() {
               </button>
             </div>
 
-            {/* Email capture — only after seeing value */}
-            {!showEmailCapture && !emailSaved && (
-              <button
-                type="button"
-                onClick={() => setShowEmailCapture(true)}
-                className="text-sm text-gray-400 hover:text-black transition-colors mt-4"
-              >
-                Get daily briefings like this →
-              </button>
-            )}
-            {showEmailCapture && !emailSaved && (
-              <div className="mt-4 flex gap-2">
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="your email"
-                  className="flex-1 rounded-lg border border-gray-300 px-4 py-2.5 text-sm focus:border-black focus:outline-none"
-                  onKeyDown={(e) => e.key === 'Enter' && handleSaveEmail()}
-                  autoFocus
-                />
-                <button type="button" onClick={handleSaveEmail} className="minimal-button">
-                  Subscribe
-                </button>
-              </div>
-            )}
-            {emailSaved && (
-              <p className="text-sm text-gray-400 mt-4">
-                You're in. Daily briefings for {city}, starting tomorrow.
-              </p>
-            )}
+            <a
+              href="/"
+              className="text-sm text-gray-400 hover:text-black transition-colors mt-4 inline-block"
+            >
+              Connect Google Calendar for even better picks →
+            </a>
           </div>
         </main>
       </div>
