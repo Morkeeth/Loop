@@ -70,13 +70,23 @@ Return a JSON array of exactly 5 events, no commentary:
 
 // ─── Step 2: Pick the best match ────────────────────────────────
 
-function buildPickPrompt(candidates: string, persona: any, city: string, dateRange: string): string {
+function buildFeedbackBlock(feedback?: { liked: string[]; disliked: string[] }): string {
+  if (!feedback || (!feedback.liked.length && !feedback.disliked.length)) return '';
+  const lines: string[] = ['\nPAST FEEDBACK (use this to pick better):'];
+  if (feedback.liked.length) lines.push(`Loved: ${feedback.liked.join(', ')}`);
+  if (feedback.disliked.length) lines.push(`Not into: ${feedback.disliked.join(', ')}`);
+  return lines.join('\n');
+}
+
+function buildPickPrompt(candidates: string, persona: any, city: string, dateRange: string, feedback?: { liked: string[]; disliked: string[] }): string {
   const personaBlock = buildPersonaBlock(persona, city);
+  const feedbackBlock = buildFeedbackBlock(feedback);
   const hasRichPersona = !!persona.persona_summary_120 && persona.profile?.fitness_tags?.length > 0;
 
   return `You are choosing ONE event for someone to attend this week. You have 5 candidates — pick the one that would make them say "how did you even find this?"
 
 ${personaBlock}
+${feedbackBlock}
 
 CANDIDATES:
 ${candidates}
@@ -86,6 +96,7 @@ PICK THE BEST ONE. Consider:
 - How unique and surprising it is (not something they'd find on Google in 5 seconds)
 - Whether the date/time works for ${dateRange}
 ${hasRichPersona ? '- Reference something specific from their life in why_this' : '- Explain why this is the most exciting option'}
+${feedbackBlock ? '- IMPORTANT: Lean toward categories they liked, avoid categories they disliked' : ''}
 
 VARIETY: Do NOT default to yoga, wellness, or afrobeats. Surprise them.
 
@@ -279,6 +290,7 @@ export async function discoverEvent(persona: any, options?: {
   provider?: string;
   apiKey?: string;
   model?: string;
+  feedback?: { liked: string[]; disliked: string[] };
 }) {
   const city = persona.profile?.home_base?.city || 'your city';
   const dateRange = getDateRange();
@@ -328,6 +340,7 @@ export async function discoverEvent(persona: any, options?: {
     persona,
     city,
     dateRange,
+    options?.feedback,
   );
   const event = await pickWithOpenAI(pickPrompt);
 

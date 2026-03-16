@@ -614,13 +614,47 @@ function Dashboard() {
               )}
             </div>
 
-            <div className="pt-8 border-t border-gray-100 mt-8">
+            <div className="pt-8 border-t border-gray-100 mt-8 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-gray-400 uppercase tracking-wide">This pick</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    fetch('/api/feedback', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ eventTitle: discoveredEvent.event_title, category: discoveredEvent.category, feedback: 'up' }),
+                    }).catch(() => {});
+                  }}
+                  className="w-8 h-8 flex items-center justify-center rounded-full border border-gray-200 hover:border-black hover:bg-black hover:text-white transition-colors text-gray-400"
+                  title="Great pick"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3H14z" /><path strokeLinecap="round" strokeLinejoin="round" d="M7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3" /></svg>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    fetch('/api/feedback', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ eventTitle: discoveredEvent.event_title, category: discoveredEvent.category, feedback: 'down' }),
+                    }).catch(() => {});
+                    setDiscoveredEvent(null);
+                    setCalendarEvent(null);
+                    setPhase('persona');
+                  }}
+                  className="w-8 h-8 flex items-center justify-center rounded-full border border-gray-200 hover:border-black hover:bg-black hover:text-white transition-colors text-gray-400"
+                  title="Not for me"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M10 15V19a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3H10z" /><path strokeLinecap="round" strokeLinejoin="round" d="M17 2h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17" /></svg>
+                </button>
+              </div>
               <button
                 type="button"
                 onClick={() => { setDiscoveredEvent(null); setCalendarEvent(null); setPhase('persona'); }}
                 className="text-sm text-gray-400 hover:text-black transition-colors"
               >
-                Not feeling it? Tweak & retry →
+                Tweak & retry →
               </button>
             </div>
           </div>
