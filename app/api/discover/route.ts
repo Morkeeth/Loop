@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { rateLimit } from '@/lib/rate-limit';
 import { discoverEvent } from '@/lib/discover';
-import { updateUser, getFeedback, saveDiscoveredEvent, type StoredEvent } from '@/lib/kv-store';
+import { updateUser, getFeedback, getCategoryPreferences, saveDiscoveredEvent, type StoredEvent } from '@/lib/kv-store';
 
 export async function POST(request: NextRequest) {
   // Rate limit: 5 discover calls per minute per IP (this is the expensive one)
@@ -21,15 +21,27 @@ export async function POST(request: NextRequest) {
 
     // Load past feedback to improve picks
     const userId = request.cookies.get('loop_user_id')?.value;
-    let feedbackSignals: { liked: string[]; disliked: string[] } | undefined;
+    let feedbackSignals: { liked: string[]; disliked: string[]; preferredCategories?: string[]; avoidCategories?: string[] } | undefined;
     if (userId) {
       try {
-        const history = await getFeedback(userId);
+        const [history, catPrefs] = await Promise.all([
+          getFeedback(userId),
+          getCategoryPreferences(userId),
+        ]);
         if (history.length > 0) {
           feedbackSignals = {
             liked: history.filter(f => f.feedback === 'up').map(f => `${f.eventTitle} (${f.category})`).slice(0, 10),
             disliked: history.filter(f => f.feedback === 'down').map(f => `${f.eventTitle} (${f.category})`).slice(0, 10),
           };
+        }
+        // Add category preferences from aggregated feedback
+        const sorted = Object.entries(catPrefs).sort(([, a], [, b]) => b.net - a.net);
+        const preferred = sorted.filter(([, v]) => v.net > 0).map(([k]) => k);
+        const avoid = sorted.filter(([, v]) => v.net < 0).map(([k]) => k);
+        if (preferred.length || avoid.length) {
+          feedbackSignals = feedbackSignals || { liked: [], disliked: [] };
+          feedbackSignals.preferredCategories = preferred;
+          feedbackSignals.avoidCategories = avoid;
         }
       } catch {}
     }

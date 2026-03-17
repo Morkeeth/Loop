@@ -65,7 +65,9 @@ Loop connects your Google Calendar to AI-powered web search. It learns your rhyt
 - `POST /api/calendar` - Create single event
 - `POST /api/calendar/events` - Bulk-add recommended events to calendar
 - `POST /api/persona` - Generate AI persona from calendar
-- `POST /api/recommendations` - Find exceptional events with GPT-5 web search
+- `POST /api/discover` - Multi-step event discovery (Perplexity search → GPT-4o pick → URL verify)
+- `GET /api/user/state` - Returns server-side persona + current event for returning users
+- `POST /api/feedback` - Save event feedback (thumbs up/down)
 
 ## User Flow
 

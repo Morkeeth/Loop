@@ -134,4 +134,23 @@ export async function getFeedback(userId: string): Promise<EventFeedback[]> {
   return raw.map((entry: any) => typeof entry === 'string' ? JSON.parse(entry) : entry);
 }
 
+// --- Category preference tracking ---
+
+export interface CategoryPreferences {
+  [category: string]: { up: number; down: number; net: number };
+}
+
+export async function getCategoryPreferences(userId: string): Promise<CategoryPreferences> {
+  const feedback = await getFeedback(userId);
+  const prefs: CategoryPreferences = {};
+  for (const entry of feedback) {
+    const cat = entry.category || 'unknown';
+    if (!prefs[cat]) prefs[cat] = { up: 0, down: 0, net: 0 };
+    if (entry.feedback === 'up') prefs[cat].up++;
+    else prefs[cat].down++;
+    prefs[cat].net = prefs[cat].up - prefs[cat].down;
+  }
+  return prefs;
+}
+
 export { redis };

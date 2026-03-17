@@ -70,15 +70,17 @@ Return a JSON array of exactly 5 events, no commentary:
 
 // ─── Step 2: Pick the best match ────────────────────────────────
 
-function buildFeedbackBlock(feedback?: { liked: string[]; disliked: string[] }): string {
-  if (!feedback || (!feedback.liked.length && !feedback.disliked.length)) return '';
+function buildFeedbackBlock(feedback?: { liked: string[]; disliked: string[]; preferredCategories?: string[]; avoidCategories?: string[] }): string {
+  if (!feedback || (!feedback.liked.length && !feedback.disliked.length && !feedback.preferredCategories?.length && !feedback.avoidCategories?.length)) return '';
   const lines: string[] = ['\nPAST FEEDBACK (use this to pick better):'];
   if (feedback.liked.length) lines.push(`Loved: ${feedback.liked.join(', ')}`);
   if (feedback.disliked.length) lines.push(`Not into: ${feedback.disliked.join(', ')}`);
+  if (feedback.preferredCategories?.length) lines.push(`Preferred categories: ${feedback.preferredCategories.join(', ')}`);
+  if (feedback.avoidCategories?.length) lines.push(`Avoid categories: ${feedback.avoidCategories.join(', ')}`);
   return lines.join('\n');
 }
 
-function buildPickPrompt(candidates: string, persona: any, city: string, dateRange: string, feedback?: { liked: string[]; disliked: string[] }): string {
+function buildPickPrompt(candidates: string, persona: any, city: string, dateRange: string, feedback?: { liked: string[]; disliked: string[]; preferredCategories?: string[]; avoidCategories?: string[] }): string {
   const personaBlock = buildPersonaBlock(persona, city);
   const feedbackBlock = buildFeedbackBlock(feedback);
   const hasRichPersona = !!persona.persona_summary_120 && persona.profile?.fitness_tags?.length > 0;
@@ -290,7 +292,7 @@ export async function discoverEvent(persona: any, options?: {
   provider?: string;
   apiKey?: string;
   model?: string;
-  feedback?: { liked: string[]; disliked: string[] };
+  feedback?: { liked: string[]; disliked: string[]; preferredCategories?: string[]; avoidCategories?: string[] };
 }) {
   const city = persona.profile?.home_base?.city || 'your city';
   const dateRange = getDateRange();
@@ -344,7 +346,33 @@ export async function discoverEvent(persona: any, options?: {
   );
   const event = await pickWithOpenAI(pickPrompt);
 
-  // Step 3: Verify the URL is real
+  // Step 3: Verify date is within target range
+  if (event.date) {
+    const eventDate = new Date(event.date);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const twoWeeksOut = new Date(today);
+    twoWeeksOut.setDate(twoWeeksOut.getDate() + 21);
+
+    if (eventDate < today || eventDate > twoWeeksOut) {
+      // Date outside range — try to find a valid candidate
+      for (const candidate of candidates) {
+        if (candidate.date) {
+          const candDate = new Date(candidate.date);
+          if (candDate >= today && candDate <= twoWeeksOut) {
+            Object.assign(event, candidate);
+            event._date_swapped = true;
+            break;
+          }
+        }
+      }
+      if (!event._date_swapped) {
+        event._date_unverified = true;
+      }
+    }
+  }
+
+  // Step 4: Verify the URL is real
   const urlValid = await verifyUrl(event.url);
   if (!urlValid) {
     // Try verifying other candidates' URLs and swap if needed

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAllUserIds, getUser, updateUser, getFeedback, saveDiscoveredEvent, type StoredEvent } from '@/lib/kv-store';
+import { getAllUserIds, getUser, updateUser, getFeedback, getCategoryPreferences, saveDiscoveredEvent, type StoredEvent } from '@/lib/kv-store';
 import { refreshAccessToken } from '@/lib/google-auth';
 import { discoverEvent } from '@/lib/discover';
 import { CalendarService } from '@/lib/calendar-service';
@@ -36,15 +36,26 @@ export async function GET(request: NextRequest) {
         },
       };
 
-      // Load feedback to personalize picks
-      let feedbackSignals: { liked: string[]; disliked: string[] } | undefined;
+      // Load feedback + category preferences to personalize picks
+      let feedbackSignals: { liked: string[]; disliked: string[]; preferredCategories?: string[]; avoidCategories?: string[] } | undefined;
       try {
-        const history = await getFeedback(userId);
+        const [history, catPrefs] = await Promise.all([
+          getFeedback(userId),
+          getCategoryPreferences(userId),
+        ]);
         if (history.length > 0) {
           feedbackSignals = {
             liked: history.filter(f => f.feedback === 'up').map(f => `${f.eventTitle} (${f.category})`).slice(0, 10),
             disliked: history.filter(f => f.feedback === 'down').map(f => `${f.eventTitle} (${f.category})`).slice(0, 10),
           };
+        }
+        const sorted = Object.entries(catPrefs).sort(([, a], [, b]) => b.net - a.net);
+        const preferred = sorted.filter(([, v]) => v.net > 0).map(([k]) => k);
+        const avoid = sorted.filter(([, v]) => v.net < 0).map(([k]) => k);
+        if (preferred.length || avoid.length) {
+          feedbackSignals = feedbackSignals || { liked: [], disliked: [] };
+          feedbackSignals.preferredCategories = preferred;
+          feedbackSignals.avoidCategories = avoid;
         }
       } catch {}
 

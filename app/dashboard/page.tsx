@@ -27,7 +27,7 @@ function Dashboard() {
   const [authenticated, setAuthenticated] = useState(false);
   const [authChecked, setAuthChecked] = useState(false);
 
-  type Phase = 'init' | 'scanning' | 'persona' | 'searching' | 'reveal' | 'error';
+  type Phase = 'init' | 'scanning' | 'persona' | 'searching' | 'reveal' | 'history' | 'error';
   const [phase, setPhase] = useState<Phase>('init');
   const [loadingMessage, setLoadingMessage] = useState('');
 
@@ -44,6 +44,7 @@ function Dashboard() {
   const [newTag, setNewTag] = useState('');
   const [discoveredEvent, setDiscoveredEvent] = useState<DiscoveredEvent | null>(null);
   const [calendarEvent, setCalendarEvent] = useState<any | null>(null);
+  const [eventHistory, setEventHistory] = useState<any[]>([]);
   const [errorMessage, setErrorMessage] = useState('');
 
   const isRunningRef = useRef(false);
@@ -100,6 +101,7 @@ function Dashboard() {
             const stateRes = await fetch('/api/user/state');
             if (stateRes.ok) {
               const state = await stateRes.json();
+              if (state.eventHistory?.length) setEventHistory(state.eventHistory);
               if (state.currentEvent && state.persona) {
                 // Returning user with this week's event — skip straight to reveal
                 setPersona(state.persona);
@@ -687,21 +689,87 @@ function Dashboard() {
               <div className="flex items-center gap-4">
                 <button
                   type="button"
-                  onClick={() => { setDiscoveredEvent(null); setCalendarEvent(null); setPhase('persona'); }}
+                  onClick={() => { setDiscoveredEvent(null); setCalendarEvent(null); findEvent(); }}
                   className="text-sm text-gray-400 hover:text-black transition-colors"
                 >
-                  Tweak & retry →
+                  Find new event →
                 </button>
                 <button
                   type="button"
-                  onClick={() => { hasRunRef.current = false; buildPersona(true); }}
-                  className="text-sm text-gray-300 hover:text-gray-500 transition-colors"
+                  onClick={() => { setDiscoveredEvent(null); setCalendarEvent(null); setPhase('persona'); }}
+                  className="text-sm text-gray-400 hover:text-black transition-colors"
                 >
-                  Rescan calendar
+                  Tweak & retry
                 </button>
+                {eventHistory.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setPhase('history')}
+                    className="text-sm text-gray-300 hover:text-gray-500 transition-colors"
+                  >
+                    Past loops
+                  </button>
+                )}
               </div>
             </div>
           </div>
+        </main>
+      </div>
+    );
+  }
+
+  // Event history
+  if (phase === 'history') {
+    return (
+      <div className="min-h-screen bg-white text-black flex flex-col">
+        <DashboardHeader />
+        <main className="mx-auto flex max-w-2xl flex-col px-6 pt-24 pb-16">
+          <div className="flex items-center justify-between mb-8">
+            <h1 className="text-3xl font-bold">Past Loops</h1>
+            <button
+              type="button"
+              onClick={() => setPhase(discoveredEvent ? 'reveal' : 'persona')}
+              className="text-sm text-gray-400 hover:text-black transition-colors"
+            >
+              ← Back
+            </button>
+          </div>
+
+          {eventHistory.length === 0 ? (
+            <p className="text-gray-400 text-sm">No past events yet. Your history will appear here after your first Loop.</p>
+          ) : (
+            <div className="space-y-6">
+              {eventHistory.map((event, i) => (
+                <div key={`${event.week_key}-${i}`} className="border-l-2 border-gray-200 pl-4 py-2 hover:border-black transition-colors">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-semibold text-base truncate">{event.event_title}</h3>
+                      <p className="text-sm text-gray-500 mt-0.5">
+                        {event.date && new Date(event.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                        {event.time && ` at ${event.time}`}
+                        {event.venue && ` · ${event.venue}`}
+                      </p>
+                      {event.description && (
+                        <p className="text-sm text-gray-600 mt-1 line-clamp-2">{event.description}</p>
+                      )}
+                    </div>
+                    <div className="flex-shrink-0">
+                      {event.category && (
+                        <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 bg-gray-50 px-2 py-0.5 rounded-full">
+                          {event.category}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  {event.url && (
+                    <a href={event.url} target="_blank" rel="noopener noreferrer" className="text-xs text-gray-400 hover:text-black mt-1 inline-block transition-colors">
+                      View details →
+                    </a>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </main>
       </div>
     );
