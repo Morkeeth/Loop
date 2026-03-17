@@ -24,7 +24,8 @@ Landing (/) → Google OAuth → Dashboard (/dashboard)
                                 ├── Phase 1: Scan calendar (6 months, 2500 events max)
                                 ├── Phase 2: Build persona (GPT-4o)
                                 ├── Phase 3: Discover event (multi-step: Perplexity search → GPT-4o pick → URL verify)
-                                └── Phase 4: Reveal + add to "Loop" calendar + feedback
+                                ├── Phase 4: Reveal + add to "Loop" calendar + feedback
+                                └── Phase 5: History — browse past discovered events
 
 Setup (/setup) → Archetype quiz (no auth needed) → /api/discover → Event reveal
 Explore (/explore) → Auto-detect city → /api/discover → Event reveal (no auth needed)
@@ -39,16 +40,15 @@ Explore (/explore) → Auto-detect city → /api/discover → Event reveal (no a
 | `app/explore/page.tsx` | No-auth auto-detect-city event finder |
 | `components/LandingHero.tsx` | Landing page with Google/Twitter OAuth |
 | `lib/discover.ts` | Multi-step discovery: Perplexity candidates → GPT-4o pick → URL verify |
-| `lib/kv-store.ts` | Redis user store, event history, feedback |
+| `lib/kv-store.ts` | Redis user store, event history, feedback, category preferences |
 | `lib/archetypes.ts` | Calendar event categorization + archetype scoring |
-| `lib/calendar-service.ts` | Google Calendar API client, free time calculation |
+| `lib/calendar-service.ts` | Google Calendar API client, Loop calendar creation |
 | `lib/cache.ts` | Browser localStorage cache (persona 7d, events weekly) |
 | `app/api/discover/route.ts` | Discovery endpoint (rate-limited, persists to Redis, feedback-aware) |
 | `app/api/user/state/route.ts` | Returns server-side persona + current event (returning user fast path) |
 | `app/api/persona/route.ts` | Persona generation from calendar data |
 | `app/api/cron/discover/route.ts` | Weekly automated discovery for all users |
 | `app/api/feedback/route.ts` | Event feedback (thumbs up/down) |
-| `app/api/recommendations/route.ts` | Legacy recommendations endpoint (deprecated, kept for reference) |
 
 ## Auth flow
 
@@ -63,8 +63,9 @@ Explore (/explore) → Auto-detect city → /api/discover → Event reveal (no a
 
 1. **Search** — Perplexity (via OpenRouter) finds 5 real event candidates in user's city
 2. **Pick** — GPT-4o selects the best match based on persona
-3. **Verify** — HEAD/GET request to event URL confirms it's live
-4. **Fallback** — If URL dead, swaps with a verified candidate URL
+3. **Date check** — Validates event is within next 3 weeks; swaps with valid candidate if not
+4. **URL verify** — HEAD/GET request to event URL confirms it's live
+5. **Fallback** — If URL dead, swaps with a verified candidate URL
 5. **Calendar** — Creates event in dedicated "Loop" calendar via Google Calendar API (auto-created on first use)
 
 ## Environment variables

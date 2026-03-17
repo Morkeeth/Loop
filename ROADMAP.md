@@ -23,13 +23,13 @@ Without notifications, the weekly cron job finds events that nobody sees.
 - [x] Thumbs up/down UI on discovered events
 - [x] Feedback stored in Redis per user
 - [x] Feed feedback history into discovery prompt ("they liked X, disliked Y")
-- [ ] Track category preferences over time (e.g., loves music, skips wellness)
+- [x] Track category preferences over time (aggregated in `getCategoryPreferences()`, fed into discovery prompt)
 - [ ] Surface feedback stats in persona page
 
 ### Consolidate discovery endpoints
 - [x] Setup page now uses `/api/discover` (same multi-step flow as dashboard)
 - [x] One `discoverEvent()` function, one endpoint for all paths
-- [ ] Delete `/api/recommendations/route.ts` (now unused, kept for reference)
+- [x] Deleted `/api/recommendations/route.ts` (543 lines) + removed dead `calculateFreeTimeSlotsForRecommendations`
 
 ### Analytics
 - [ ] Add PostHog or Mixpanel
@@ -39,7 +39,7 @@ Without notifications, the weekly cron job finds events that nobody sees.
 
 ### Event verification
 - [x] URL HEAD check exists in `lib/discover.ts`
-- [ ] Add date verification (is the event actually this week?)
+- [x] Date verification — validates event is within 3-week window, swaps with valid candidate if out of range
 - [ ] Add content check (fetch page, confirm event name appears)
 - [ ] Flag hallucinated events before showing to user
 
@@ -50,8 +50,8 @@ Without notifications, the weekly cron job finds events that nobody sees.
 - [x] If found: dashboard skips directly to reveal phase
 - [x] "Rescan calendar" button as explicit refresh action
 - [x] Events persisted to Redis (`saveDiscoveredEvent`) from both dashboard and cron
-- [ ] New phase: "history" — show past discovered events
-- [ ] "Find new event" button to manually trigger re-discovery
+- [x] "Past Loops" — event history view showing all previously discovered events
+- [x] "Find new event" button to manually trigger re-discovery from reveal phase
 
 ### Progressive permissions
 - [ ] Start with calendar read-only scope
@@ -110,3 +110,9 @@ Redis works but is fragile for user data:
 - [x] Event persistence to Redis — `StoredEvent` type, save/get/history functions in `kv-store.ts`
 - [x] Setup page consolidated to use `/api/discover` (same backend as dashboard)
 - [x] `PROJECT.md` — complete project overview (stack, architecture, key files, flows, env vars)
+- [x] Deleted `/api/recommendations/route.ts` (543 lines of dead code) + `calculateFreeTimeSlotsForRecommendations`
+- [x] Date verification in discovery — rejects events outside 3-week window, swaps with valid candidate
+- [x] Category preference tracking — `getCategoryPreferences()` aggregates feedback, fed into discovery + cron
+- [x] "Find new event" button — re-triggers discovery from reveal phase without rescanning calendar
+- [x] "Past Loops" history view — browse all previously discovered events in dashboard
+- [x] Updated README API endpoints

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getUser, getCurrentEvent } from '@/lib/kv-store';
+import { getUser, getCurrentEvent, getEventHistory, getCategoryPreferences } from '@/lib/kv-store';
 
 export async function GET(request: NextRequest) {
   const userId = request.cookies.get('loop_user_id')?.value;
@@ -13,7 +13,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
-    const currentEvent = await getCurrentEvent(userId);
+    const [currentEvent, eventHistory, categoryPreferences] = await Promise.all([
+      getCurrentEvent(userId),
+      getEventHistory(userId),
+      getCategoryPreferences(userId),
+    ]);
 
     return NextResponse.json({
       hasPersona: Boolean(user.persona),
@@ -21,6 +25,8 @@ export async function GET(request: NextRequest) {
       city: user.city || null,
       tags: user.tags || [],
       currentEvent: currentEvent || null,
+      eventHistory: eventHistory || [],
+      categoryPreferences,
       lastEventAt: user.last_event_at || null,
     });
   } catch (error) {
