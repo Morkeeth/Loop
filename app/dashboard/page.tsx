@@ -76,7 +76,7 @@ function Dashboard() {
     return res;
   }, [router]);
 
-  // --- Auth check via cookie ---
+  // --- Auth check + server state hydration ---
   useEffect(() => {
     const errorParam = searchParams.get('error');
     if (errorParam) {
@@ -86,16 +86,51 @@ function Dashboard() {
       return;
     }
 
-    fetch('/api/auth/session')
-      .then(res => {
-        if (res.ok) {
-          setAuthenticated(true);
-        } else {
-          router.push('/');
+    (async () => {
+      try {
+        const sessionRes = await fetch('/api/auth/session');
+        if (!sessionRes.ok) { router.push('/'); return; }
+
+        setAuthenticated(true);
+
+        // Check server for existing persona + event (returning user fast path)
+        const forceRefresh = searchParams.get('refresh') === '1';
+        if (!forceRefresh) {
+          try {
+            const stateRes = await fetch('/api/user/state');
+            if (stateRes.ok) {
+              const state = await stateRes.json();
+              if (state.currentEvent && state.persona) {
+                // Returning user with this week's event — skip straight to reveal
+                setPersona(state.persona);
+                setDiscoveredEvent(state.currentEvent);
+                setupEditableFields(state.persona);
+                setEditedCity(state.city || state.persona?.profile?.home_base?.city || '');
+                if (state.tags?.length) setEditedTags(state.tags);
+                setPhase('reveal');
+                hasRunRef.current = true;
+                return;
+              }
+              if (state.persona) {
+                // Have persona but no event this week — skip to persona phase
+                setPersona(state.persona);
+                setCachedPersona(state.persona);
+                setupEditableFields(state.persona);
+                setEditedCity(state.city || state.persona?.profile?.home_base?.city || '');
+                if (state.tags?.length) setEditedTags(state.tags);
+                setPhase('persona');
+                hasRunRef.current = true;
+                return;
+              }
+            }
+          } catch {}
         }
-      })
-      .catch(() => router.push('/'))
-      .finally(() => setAuthChecked(true));
+      } catch {
+        router.push('/');
+      } finally {
+        setAuthChecked(true);
+      }
+    })();
   }, [searchParams, router]);
 
   // --- Animate scanning events ---
@@ -649,13 +684,22 @@ function Dashboard() {
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M10 15V19a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3H10z" /><path strokeLinecap="round" strokeLinejoin="round" d="M17 2h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17" /></svg>
                 </button>
               </div>
-              <button
-                type="button"
-                onClick={() => { setDiscoveredEvent(null); setCalendarEvent(null); setPhase('persona'); }}
-                className="text-sm text-gray-400 hover:text-black transition-colors"
-              >
-                Tweak & retry →
-              </button>
+              <div className="flex items-center gap-4">
+                <button
+                  type="button"
+                  onClick={() => { setDiscoveredEvent(null); setCalendarEvent(null); setPhase('persona'); }}
+                  className="text-sm text-gray-400 hover:text-black transition-colors"
+                >
+                  Tweak & retry →
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { hasRunRef.current = false; buildPersona(true); }}
+                  className="text-sm text-gray-300 hover:text-gray-500 transition-colors"
+                >
+                  Rescan calendar
+                </button>
+              </div>
             </div>
           </div>
         </main>

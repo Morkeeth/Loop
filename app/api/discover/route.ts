@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { rateLimit } from '@/lib/rate-limit';
 import { discoverEvent } from '@/lib/discover';
-import { updateUser, getFeedback } from '@/lib/kv-store';
+import { updateUser, getFeedback, saveDiscoveredEvent, type StoredEvent } from '@/lib/kv-store';
 
 export async function POST(request: NextRequest) {
   // Rate limit: 5 discover calls per minute per IP (this is the expensive one)
@@ -41,9 +41,27 @@ export async function POST(request: NextRequest) {
       feedback: feedbackSignals,
     });
 
-    // Track last event discovery time in KV
-    if (userId) {
-      updateUser(userId, { last_event_at: new Date().toISOString() }).catch(() => {});
+    // Persist event to Redis for returning user experience
+    if (userId && result.event) {
+      const e = result.event;
+      const stored: StoredEvent = {
+        event_title: e.event_title || e.title || '',
+        venue: e.venue || '',
+        address: e.address || '',
+        date: e.date || '',
+        time: e.time || e.start_time || '',
+        end_time: e.end_time || '',
+        description: e.description || '',
+        url: e.url || e.link || '',
+        category: e.category || '',
+        why_this: e.why_this || e.why || '',
+        discovered_at: '',
+        week_key: '',
+      };
+      Promise.all([
+        saveDiscoveredEvent(userId, stored),
+        updateUser(userId, { last_event_at: new Date().toISOString() }),
+      ]).catch(() => {});
     }
 
     return NextResponse.json(result);

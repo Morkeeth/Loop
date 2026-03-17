@@ -20,13 +20,14 @@ Loop is a serendipity engine disguised as a calendar app. It connects to your Go
 
 ```
 Landing (/) → Google OAuth → Dashboard (/dashboard)
+                                ├── Fast path: check server state → skip to reveal if this week's event exists
                                 ├── Phase 1: Scan calendar (6 months, 2500 events max)
                                 ├── Phase 2: Build persona (GPT-4o)
                                 ├── Phase 3: Discover event (multi-step: Perplexity search → GPT-4o pick → URL verify)
-                                └── Phase 4: Reveal + add to calendar
+                                └── Phase 4: Reveal + add to "Loop" calendar + feedback
 
-Setup (/setup) → Archetype quiz (no auth needed) → Event discovery
-Explore (/explore) → Auto-detect city → Event discovery (no auth needed)
+Setup (/setup) → Archetype quiz (no auth needed) → /api/discover → Event reveal
+Explore (/explore) → Auto-detect city → /api/discover → Event reveal (no auth needed)
 ```
 
 ## Key files
@@ -38,23 +39,25 @@ Explore (/explore) → Auto-detect city → Event discovery (no auth needed)
 | `app/explore/page.tsx` | No-auth auto-detect-city event finder |
 | `components/LandingHero.tsx` | Landing page with Google/Twitter OAuth |
 | `lib/discover.ts` | Multi-step discovery: Perplexity candidates → GPT-4o pick → URL verify |
-| `lib/kv-store.ts` | Redis user store + event feedback |
+| `lib/kv-store.ts` | Redis user store, event history, feedback |
 | `lib/archetypes.ts` | Calendar event categorization + archetype scoring |
 | `lib/calendar-service.ts` | Google Calendar API client, free time calculation |
 | `lib/cache.ts` | Browser localStorage cache (persona 7d, events weekly) |
-| `app/api/discover/route.ts` | Discovery endpoint (rate-limited, multi-provider) |
-| `app/api/recommendations/route.ts` | Recommendations endpoint (free/premium tier split) |
+| `app/api/discover/route.ts` | Discovery endpoint (rate-limited, persists to Redis, feedback-aware) |
+| `app/api/user/state/route.ts` | Returns server-side persona + current event (returning user fast path) |
 | `app/api/persona/route.ts` | Persona generation from calendar data |
 | `app/api/cron/discover/route.ts` | Weekly automated discovery for all users |
 | `app/api/feedback/route.ts` | Event feedback (thumbs up/down) |
+| `app/api/recommendations/route.ts` | Legacy recommendations endpoint (deprecated, kept for reference) |
 
 ## Auth flow
 
 1. User clicks "Connect Google Calendar" → Supabase OAuth → Google consent screen
 2. Callback exchanges code for session → cookies set (access_token, refresh_token, user_id)
 3. Dashboard checks `/api/auth/session` → refreshes token if expired
-4. Calendar API calls use cookie-based token (server-side)
-5. User profile + persona persisted to Upstash Redis
+4. Dashboard checks `/api/user/state` → if persona + this week's event exist, skips pipeline
+5. Calendar API calls use cookie-based token (server-side)
+6. User profile, persona, discovered events, and feedback persisted to Upstash Redis
 
 ## Discovery flow (multi-step)
 
