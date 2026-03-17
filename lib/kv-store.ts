@@ -52,6 +52,63 @@ export async function getAllUserIds(): Promise<string[]> {
   return redis.smembers('users');
 }
 
+// --- Discovered events ---
+
+export interface StoredEvent {
+  event_title: string;
+  venue: string;
+  address: string;
+  date: string;
+  time: string;
+  end_time: string;
+  description: string;
+  url: string;
+  category: string;
+  why_this: string;
+  calendar_event_id?: string;
+  calendar_event_link?: string;
+  discovered_at: string;
+  week_key: string; // e.g. "2026-W12"
+}
+
+function weekKey(): string {
+  const now = new Date();
+  const jan1 = new Date(now.getFullYear(), 0, 1);
+  const weekNum = Math.ceil(((now.getTime() - jan1.getTime()) / 86400000 + jan1.getDay() + 1) / 7);
+  return `${now.getFullYear()}-W${String(weekNum).padStart(2, '0')}`;
+}
+
+function eventKey(userId: string) {
+  return `event:${userId}:current`;
+}
+
+function eventHistoryKey(userId: string) {
+  return `events:${userId}`;
+}
+
+export async function saveDiscoveredEvent(userId: string, event: StoredEvent): Promise<void> {
+  event.discovered_at = new Date().toISOString();
+  event.week_key = weekKey();
+  // Save as current event
+  await redis.set(eventKey(userId), event);
+  // Also push to history (keep last 25)
+  await redis.lpush(eventHistoryKey(userId), JSON.stringify(event));
+  await redis.ltrim(eventHistoryKey(userId), 0, 24);
+}
+
+export async function getCurrentEvent(userId: string): Promise<StoredEvent | null> {
+  const event = await redis.get<StoredEvent>(eventKey(userId));
+  if (!event) return null;
+  // Only return if it's from the current week
+  if (event.week_key !== weekKey()) return null;
+  return event;
+}
+
+export async function getEventHistory(userId: string): Promise<StoredEvent[]> {
+  const raw = await redis.lrange(eventHistoryKey(userId), 0, 24);
+  return raw.map((entry: any) => typeof entry === 'string' ? JSON.parse(entry) : entry);
+}
+
 // --- Event feedback ---
 
 export interface EventFeedback {

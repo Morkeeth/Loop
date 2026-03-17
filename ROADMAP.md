@@ -27,11 +27,9 @@ Without notifications, the weekly cron job finds events that nobody sees.
 - [ ] Surface feedback stats in persona page
 
 ### Consolidate discovery endpoints
-Three endpoints do overlapping things:
-- `/api/discover` — multi-step (Perplexity + GPT-4o pick + URL verify)
-- `/api/recommendations` — single-shot GPT-5 web search (free/premium split)
-- Remove the duplication: one `discoverEvent()` function, one endpoint
-- Setup page and Dashboard should use the same backend path
+- [x] Setup page now uses `/api/discover` (same multi-step flow as dashboard)
+- [x] One `discoverEvent()` function, one endpoint for all paths
+- [ ] Delete `/api/recommendations/route.ts` (now unused, kept for reference)
 
 ### Analytics
 - [ ] Add PostHog or Mixpanel
@@ -48,11 +46,12 @@ Three endpoints do overlapping things:
 ## P2 — User experience
 
 ### Returning user experience
-Currently the dashboard re-runs the full pipeline on every visit unless localStorage has cached data.
-- [ ] Server-side: check Redis for existing persona + this week's event
-- [ ] If found: skip directly to reveal phase
-- [ ] Show "Refresh persona" and "Find new event" as explicit actions
+- [x] Server-side: `/api/user/state` checks Redis for existing persona + this week's event
+- [x] If found: dashboard skips directly to reveal phase
+- [x] "Rescan calendar" button as explicit refresh action
+- [x] Events persisted to Redis (`saveDiscoveredEvent`) from both dashboard and cron
 - [ ] New phase: "history" — show past discovered events
+- [ ] "Find new event" button to manually trigger re-discovery
 
 ### Progressive permissions
 - [ ] Start with calendar read-only scope
@@ -107,3 +106,7 @@ Redis works but is fragile for user data:
 - [x] Dedicated "Loop" calendar — events go to their own calendar instead of primary, Google handles notifications natively
 - [x] Cron job also uses Loop calendar + feedback signals
 - [x] Net: ~1,000 lines deleted, cleaner codebase
+- [x] Returning user experience — server state hydration via `/api/user/state`, skip-to-reveal fast path
+- [x] Event persistence to Redis — `StoredEvent` type, save/get/history functions in `kv-store.ts`
+- [x] Setup page consolidated to use `/api/discover` (same backend as dashboard)
+- [x] `PROJECT.md` — complete project overview (stack, architecture, key files, flows, env vars)

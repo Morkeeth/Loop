@@ -161,25 +161,26 @@ export default function SetupPage() {
       const { archetypeToLoopProfile } = await import('@/lib/archetype-profile');
       const profile = archetypeToLoopProfile(finalAnswers);
 
-      const minimalPersona = {
-        interests: { hobbies: [] as string[], sports: [] as string[], entertainment: [] as string[], recurringActivities: [] },
-        professional: { industry: 'unknown' },
-        location: { primaryLocation: userCity },
-        personality: {},
-        lifestyle: {},
+      // Build persona in the format /api/discover expects
+      const persona = {
+        persona_summary_120: profile,
+        profile: {
+          home_base: { city: userCity, country: 'unknown' },
+          interests_tags: finalAnswers.music ? [finalAnswers.music, finalAnswers.sport, finalAnswers.discovery].filter(Boolean) : [],
+          local_event_interests: [],
+        },
       };
 
-      const res = await fetch('/api/recommendations', {
+      const modelConfig: Record<string, string | undefined> = {};
+      if (openaiKey.trim()) {
+        modelConfig.provider = 'openai';
+        modelConfig.apiKey = openaiKey.trim();
+      }
+
+      const res = await fetch('/api/discover', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          persona: minimalPersona,
-          calendarEvents: [],
-          userLocation: { city: userCity, country: '', timezone: Intl.DateTimeFormat().resolvedOptions().timeZone },
-          currentDate: new Date().toISOString(),
-          archetypeProfile: profile,
-          userApiKey: openaiKey.trim() || undefined,
-        }),
+        body: JSON.stringify({ persona, ...modelConfig }),
       });
 
       if (!res.ok) {
@@ -188,17 +189,17 @@ export default function SetupPage() {
       }
 
       const data = await res.json();
-      const event = data.recommendations?.[0]?.recommendations?.[0] || data.recommendations?.[0] || data.event;
-      if (event && (event.title || event.event_title)) {
+      const event = data.event;
+      if (event && (event.event_title || event.title)) {
         setDiscoveredEvent({
-          event_title: event.title || event.event_title,
-          venue: event.location || event.venue,
+          event_title: event.event_title || event.title,
+          venue: event.venue || event.location,
           date: event.date,
-          time: event.start_time || event.time,
+          time: event.time || event.start_time,
           description: event.description,
-          why_this: event.why || event.why_this || event.description,
+          why_this: event.why_this || event.why || event.description,
           cost: event.cost,
-          url: event.source_url || event.link || event.url,
+          url: event.url || event.link,
           vibe: event.vibe,
           category: event.category,
         });

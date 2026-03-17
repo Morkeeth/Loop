@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAllUserIds, getUser, updateUser, getFeedback } from '@/lib/kv-store';
+import { getAllUserIds, getUser, updateUser, getFeedback, saveDiscoveredEvent, type StoredEvent } from '@/lib/kv-store';
 import { refreshAccessToken } from '@/lib/google-auth';
 import { discoverEvent } from '@/lib/discover';
 import { CalendarService } from '@/lib/calendar-service';
@@ -86,7 +86,25 @@ export async function GET(request: NextRequest) {
         end: { dateTime: end.toISOString(), timeZone: tz },
       } as any, loopCalendarId);
 
-      await updateUser(userId, { last_event_at: new Date().toISOString() });
+      // Persist to Redis for returning user experience
+      const stored: StoredEvent = {
+        event_title: event.event_title || '',
+        venue: event.venue || '',
+        address: event.address || '',
+        date: event.date || '',
+        time: event.time || '',
+        end_time: event.end_time || '',
+        description: event.description || '',
+        url: event.url || '',
+        category: event.category || '',
+        why_this: event.why_this || '',
+        discovered_at: '',
+        week_key: '',
+      };
+      await Promise.all([
+        saveDiscoveredEvent(userId, stored),
+        updateUser(userId, { last_event_at: new Date().toISOString() }),
+      ]);
       results.push({ userId, status: 'success', event: event.event_title });
     } catch (error) {
       results.push({
