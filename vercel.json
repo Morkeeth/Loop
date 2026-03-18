@@ -1,6 +1,10 @@
 {
   "crons": [
     {
+      "path": "/api/cron/city-events",
+      "schedule": "0 7 * * 1"
+    },
+    {
       "path": "/api/cron/discover",
       "schedule": "0 9 * * 1"
     }

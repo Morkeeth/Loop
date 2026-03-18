@@ -17,6 +17,19 @@ Without notifications, the weekly cron job finds events that nobody sees.
 - [ ] Optional: email digest when weekly event is discovered (Resend/Postmark)
 - [ ] Optional: push notifications via web push API
 
+### Free tier — curated city events
+- [x] Luma scraper — parses `luma.com/{city}` __NEXT_DATA__ for events
+- [x] Shotgun scraper — HTML + JSON extraction from `shotgun.live/en/cities/{slug}`
+- [x] GPT-4o-mini curation — picks best 3-5 from scraped candidates
+- [x] City events cache in Redis — `city:{name}:{weekKey}` with 10-day TTL
+- [x] `GET /api/city-events?city=X` — serves cached events, scrapes on cold start
+- [x] Weekly cron — `/api/cron/city-events` runs Monday 7AM UTC for all active cities
+- [x] Explore page redesigned — shows curated picks, upsell to pro
+- [x] `user.plan` field on LoopUser — ready for payment gating (`free` | `pro`)
+- [ ] Lemon Squeezy / Stripe integration — payment checkout + webhook
+- [ ] Gate `/api/discover` behind `pro` plan (free users see city picks only)
+- [ ] Add more event sources (Eventbrite, Dice, RA)
+
 ## P1 — Core product quality
 
 ### Event feedback loop
@@ -116,3 +129,8 @@ Redis works but is fragile for user data:
 - [x] "Find new event" button — re-triggers discovery from reveal phase without rescanning calendar
 - [x] "Past Loops" history view — browse all previously discovered events in dashboard
 - [x] Updated README API endpoints
+- [x] Free tier: Luma + Shotgun scrapers → GPT-4o-mini curation → Redis cache
+- [x] `GET /api/city-events` endpoint + weekly city cron job
+- [x] Explore page redesigned: curated city picks with upsell
+- [x] `user.plan` field (`free` | `pro`) ready for payment gating
+- [x] `node-html-parser` dependency for Shotgun scraping
