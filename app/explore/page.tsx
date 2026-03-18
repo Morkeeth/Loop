@@ -1,42 +1,29 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { DashboardHeader } from '@/components/DashboardHeader';
-import type { DiscoveredEvent } from '@/lib/pipeline-types';
-
-const SEARCH_PHASES = [
-  'Checking hidden venues...',
-  'Scrolling local Instagram...',
-  'Digging through small listings...',
-  'Found some underground stuff...',
-  'Picking the one you\'d actually go to...',
-];
+import type { CuratedCityEvent } from '@/lib/scrapers/types';
 
 export default function ExplorePage() {
   const [city, setCity] = useState<string | null>(null);
-  const [isSearching, setIsSearching] = useState(false);
-  const [discoveredEvent, setDiscoveredEvent] = useState<DiscoveredEvent | null>(null);
+  const [events, setEvents] = useState<CuratedCityEvent[]>([]);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [searchPhase, setSearchPhase] = useState('');
-  const [detectingLocation, setDetectingLocation] = useState(true);
 
   // Auto-detect city on mount
   useEffect(() => {
     (async () => {
       try {
-        // Try IP-based geolocation first (no permission needed)
         const res = await fetch('https://ipapi.co/json/');
         if (res.ok) {
           const data = await res.json();
           if (data.city) {
             setCity(data.city);
-            setDetectingLocation(false);
             return;
           }
         }
       } catch {}
 
-      // Fallback: try browser geolocation
       if ('geolocation' in navigator) {
         navigator.geolocation.getCurrentPosition(
           async (pos) => {
@@ -47,143 +34,84 @@ export default function ExplorePage() {
               );
               if (res.ok) {
                 const data = await res.json();
-                const detectedCity = data.address?.city || data.address?.town || data.address?.village;
-                if (detectedCity) {
-                  setCity(detectedCity);
-                  setDetectingLocation(false);
-                  return;
-                }
+                const detected = data.address?.city || data.address?.town || data.address?.village;
+                if (detected) { setCity(detected); return; }
               }
             } catch {}
-            setDetectingLocation(false);
+            setLoading(false);
           },
-          () => setDetectingLocation(false),
+          () => setLoading(false),
           { timeout: 5000 }
         );
       } else {
-        setDetectingLocation(false);
+        setLoading(false);
       }
     })();
   }, []);
 
-  // Auto-search once city is detected
+  // Fetch city events once city is known
   useEffect(() => {
-    if (city && !discoveredEvent && !isSearching && !error) {
-      handleDiscover();
-    }
+    if (!city) return;
+
+    (async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const res = await fetch(`/api/city-events?city=${encodeURIComponent(city)}`);
+        if (!res.ok) throw new Error('Failed to load events');
+        const data = await res.json();
+        setEvents(data.events || []);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Something went wrong');
+      } finally {
+        setLoading(false);
+      }
+    })();
   }, [city]);
 
-  const handleDiscover = useCallback(async () => {
-    if (!city || isSearching) return;
-
-    setIsSearching(true);
-    setError(null);
-    setDiscoveredEvent(null);
-
-    let phaseIndex = 0;
-    setSearchPhase(SEARCH_PHASES[1]); // skip location phase since we already have it
-    const phaseInterval = setInterval(() => {
-      phaseIndex = Math.min(phaseIndex + 1, SEARCH_PHASES.length - 1);
-      setSearchPhase(SEARCH_PHASES[phaseIndex]);
-    }, 3500);
-
-    try {
-      // Rotate interests each request so we don't get the same event type
-      const allInterests = ['culture', 'social', 'music', 'food', 'art', 'wellness', 'comedy', 'film', 'dance', 'vintage', 'craft', 'nightlife'];
-      const shuffled = [...allInterests].sort(() => Math.random() - 0.5).slice(0, 5);
-
-      const syntheticPersona = {
-        persona_summary_120: `Someone living in ${city} looking for something interesting and unexpected to do this week.`,
-        profile: {
-          home_base: { city, country: 'unknown' },
-          local_event_interests: shuffled,
-          interests_tags: shuffled,
-        },
-      };
-
-      const modelConfig = typeof window !== 'undefined' ? {
-        provider: localStorage.getItem('loopModelProvider') || undefined,
-        apiKey: localStorage.getItem('loopModelApiKey') || undefined,
-        model: localStorage.getItem('loopModelName') || undefined,
-      } : {};
-
-      const response = await fetch('/api/discover', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ persona: syntheticPersona, ...modelConfig }),
-      });
-
-      if (!response.ok) {
-        const data = await response.json().catch(() => ({}));
-        throw new Error(data.error || data.details || 'Failed to find an event');
-      }
-
-      const data = await response.json();
-      setDiscoveredEvent(data.event);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Something went wrong');
-    } finally {
-      clearInterval(phaseInterval);
-      setIsSearching(false);
-    }
-  }, [city, isSearching]);
-
-  // --- Detecting / Searching state ---
-  if (detectingLocation || isSearching) {
+  // --- Loading ---
+  if (loading) {
     return (
       <div className="min-h-screen bg-white text-black flex flex-col">
         <DashboardHeader />
         <div className="flex-1 flex flex-col items-center justify-center px-6">
-          <div className="max-w-sm w-full space-y-10 text-center">
+          <div className="max-w-sm w-full space-y-8 text-center">
             {city && (
-              <p className="text-xs font-semibold uppercase tracking-widest text-gray-400">
-                {city}
-              </p>
+              <p className="text-xs font-semibold uppercase tracking-widest text-gray-400">{city}</p>
             )}
-
-            <div className="space-y-3">
-              <div className="relative h-0.5 w-full bg-gray-100 rounded-full overflow-hidden">
-                <div className="absolute inset-0 bg-black rounded-full animate-search-bar" />
-              </div>
+            <div className="relative h-0.5 w-full bg-gray-100 rounded-full overflow-hidden">
+              <div className="absolute inset-0 bg-black rounded-full" style={{
+                animation: 'searchBar 2s ease-in-out infinite',
+              }} />
             </div>
-
-            <div className="space-y-2">
-              <p className="text-xl font-light text-gray-800">
-                {detectingLocation ? 'Locating you...' : searchPhase}
-              </p>
-              <p className="text-xs text-gray-400">
-                This takes 10–20 seconds — we're searching real venues
-              </p>
-            </div>
+            <p className="text-xl font-light text-gray-800">
+              {city ? `Finding what's on in ${city}...` : 'Locating you...'}
+            </p>
           </div>
         </div>
-
         <style jsx>{`
           @keyframes searchBar {
             0% { transform: translateX(-100%); width: 40%; }
             50% { transform: translateX(60%); width: 60%; }
             100% { transform: translateX(-100%); width: 40%; }
           }
-          .animate-search-bar {
-            animation: searchBar 2s ease-in-out infinite;
-          }
         `}</style>
       </div>
     );
   }
 
-  // --- No city detected ---
-  if (!city && !discoveredEvent) {
+  // --- No city ---
+  if (!city) {
     return (
       <div className="min-h-screen bg-white text-black flex flex-col">
         <DashboardHeader />
         <main className="flex-1 flex flex-col items-center justify-center px-6 pb-16">
           <div className="text-center space-y-6 max-w-md">
             <h1 className="text-3xl font-bold">Where are you?</h1>
-            <p className="text-sm text-gray-500">We couldn't detect your location. Type your city and we'll find something.</p>
+            <p className="text-sm text-gray-500">Type your city and we'll show you what's happening.</p>
             <input
               type="text"
-              placeholder="Paris, London, New York..."
+              placeholder="Dublin, London, Paris..."
               className="w-full text-center text-xl font-light border-0 border-b-2 border-gray-200 py-3 focus:border-black focus:outline-none transition-colors placeholder:text-gray-300"
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && (e.target as HTMLInputElement).value.trim()) {
@@ -198,88 +126,130 @@ export default function ExplorePage() {
     );
   }
 
-  // --- Error state ---
+  // --- Error ---
   if (error) {
     return (
       <div className="min-h-screen bg-white text-black flex flex-col">
         <DashboardHeader />
         <main className="flex-1 flex flex-col items-center justify-center px-6 pb-16">
           <div className="text-center space-y-4 max-w-md">
-            <h1 className="text-2xl font-bold">Couldn't find anything</h1>
+            <h1 className="text-2xl font-bold">Couldn't load events</h1>
             <p className="text-sm text-gray-500">{error}</p>
-            <button type="button" onClick={handleDiscover} className="minimal-button">Try again</button>
+            <button type="button" onClick={() => setCity(city)} className="minimal-button">Try again</button>
           </div>
         </main>
       </div>
     );
   }
 
-  // --- Result state ---
-  if (discoveredEvent) {
-    return (
-      <div className="min-h-screen bg-white text-black flex flex-col">
-        <DashboardHeader />
-        <main className="mx-auto flex max-w-2xl flex-col px-6 pt-24 pb-16">
-          <p className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-3">
-            This week in {city}
-          </p>
-          <h1 className="text-4xl font-bold leading-tight mb-6">{discoveredEvent.event_title}</h1>
+  // --- Events list ---
+  return (
+    <div className="min-h-screen bg-white text-black flex flex-col">
+      <DashboardHeader />
 
-          <div className="space-y-6">
-            <div className="flex flex-wrap gap-x-8 gap-y-2 text-sm">
-              <div>
-                <p className="text-xs uppercase tracking-wide text-gray-400 mb-1">When</p>
-                <p className="font-medium">
-                  {new Date(discoveredEvent.date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
-                  {' at '}{discoveredEvent.time}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs uppercase tracking-wide text-gray-400 mb-1">Where</p>
-                <p className="font-medium">{discoveredEvent.venue}</p>
-                <p className="text-gray-500 text-xs">{discoveredEvent.address}</p>
-              </div>
-              {discoveredEvent.category && (
-                <div>
-                  <p className="text-xs uppercase tracking-wide text-gray-400 mb-1">Vibe</p>
-                  <p className="font-medium">{discoveredEvent.category}</p>
+      <main className="mx-auto flex max-w-2xl flex-col px-6 pt-24 pb-16 w-full">
+        <div className="flex items-end justify-between mb-8">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-2">
+              This week in
+            </p>
+            <h1 className="text-4xl font-bold">{city}</h1>
+          </div>
+          <button
+            type="button"
+            onClick={() => { setCity(null); setEvents([]); }}
+            className="text-sm text-gray-400 hover:text-black transition-colors"
+          >
+            Change city
+          </button>
+        </div>
+
+        {events.length === 0 ? (
+          <div className="text-center py-16 space-y-4">
+            <p className="text-gray-400">No events found for {city} this week.</p>
+            <p className="text-sm text-gray-300">We've added {city} to our radar — check back Monday.</p>
+          </div>
+        ) : (
+          <div className="space-y-8">
+            {events.map((event, i) => (
+              <article key={`${event.title}-${i}`} className="group">
+                <div className="flex gap-5">
+                  {event.imageUrl && (
+                    <div className="flex-shrink-0 w-24 h-24 rounded-lg overflow-hidden bg-gray-100">
+                      <img
+                        src={event.imageUrl}
+                        alt=""
+                        className="w-full h-full object-cover"
+                        loading="lazy"
+                      />
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between gap-3">
+                      <h2 className="text-lg font-semibold leading-tight group-hover:underline">
+                        {event.url ? (
+                          <a href={event.url} target="_blank" rel="noopener noreferrer">{event.title}</a>
+                        ) : event.title}
+                      </h2>
+                      <div className="flex-shrink-0 flex items-center gap-2">
+                        {event.category && (
+                          <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 bg-gray-50 px-2 py-0.5 rounded-full whitespace-nowrap">
+                            {event.category}
+                          </span>
+                        )}
+                        <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-300 whitespace-nowrap">
+                          {event.source}
+                        </span>
+                      </div>
+                    </div>
+
+                    <p className="text-sm text-gray-500 mt-1">
+                      {event.date && new Date(event.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                      {event.time && ` at ${event.time}`}
+                      {event.venue && ` · ${event.venue}`}
+                    </p>
+
+                    {event.description && (
+                      <p className="text-sm text-gray-600 mt-2 leading-relaxed">{event.description}</p>
+                    )}
+
+                    {event.whyGo && (
+                      <p className="text-xs italic text-gray-400 mt-1.5">{event.whyGo}</p>
+                    )}
+
+                    {event.url && (
+                      <a
+                        href={event.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs font-medium text-black hover:underline mt-2 inline-block"
+                      >
+                        Get tickets →
+                      </a>
+                    )}
+                  </div>
                 </div>
-              )}
-            </div>
-
-            <div className="border-l-2 border-black pl-4">
-              <p className="text-base text-gray-800 leading-relaxed">{discoveredEvent.description}</p>
-            </div>
-
-            <p className="text-sm italic text-gray-500">{discoveredEvent.why_this}</p>
-
-            <div className="flex flex-wrap gap-3">
-              {discoveredEvent.url && (
-                <a href={discoveredEvent.url} target="_blank" rel="noopener noreferrer"
-                  className="minimal-button inline-flex items-center gap-2">
-                  Get tickets / details
-                </a>
-              )}
-              <button
-                type="button"
-                onClick={() => { setDiscoveredEvent(null); handleDiscover(); }}
-                className="rounded-lg border border-gray-300 px-5 py-2.5 text-sm font-semibold uppercase tracking-wide hover:border-black transition-colors"
-              >
-                Find another
-              </button>
-            </div>
-
-            <a
-              href="/"
-              className="text-sm text-gray-400 hover:text-black transition-colors mt-4 inline-block"
-            >
-              Connect Google Calendar for even better picks →
-            </a>
+              </article>
+            ))}
           </div>
-        </main>
-      </div>
-    );
-  }
+        )}
 
-  return null;
+        {/* Upsell */}
+        <div className="mt-16 pt-8 border-t border-gray-100 text-center space-y-3">
+          <p className="text-sm text-gray-500">
+            Want events picked just for <span className="font-semibold text-black">you</span>?
+          </p>
+          <a
+            href="/"
+            className="minimal-button inline-block"
+          >
+            Connect Google Calendar
+          </a>
+          <p className="text-xs text-gray-300">
+            We read your calendar, build your persona, and find the one event you'd never discover on your own.
+          </p>
+        </div>
+      </main>
+    </div>
+  );
 }

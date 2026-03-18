@@ -28,7 +28,8 @@ Landing (/) → Google OAuth → Dashboard (/dashboard)
                                 └── Phase 5: History — browse past discovered events
 
 Setup (/setup) → Archetype quiz (no auth needed) → /api/discover → Event reveal
-Explore (/explore) → Auto-detect city → /api/discover → Event reveal (no auth needed)
+Explore (/explore) → Auto-detect city → /api/city-events → Curated picks (free, no auth)
+                     └── Upsell: "Want personalized picks? Connect Google Calendar"
 ```
 
 ## Key files
@@ -43,12 +44,18 @@ Explore (/explore) → Auto-detect city → /api/discover → Event reveal (no a
 | `lib/kv-store.ts` | Redis user store, event history, feedback, category preferences |
 | `lib/archetypes.ts` | Calendar event categorization + archetype scoring |
 | `lib/calendar-service.ts` | Google Calendar API client, Loop calendar creation |
+| `lib/scrapers/luma.ts` | Luma discover page scraper (parses __NEXT_DATA__ JSON) |
+| `lib/scrapers/shotgun.ts` | Shotgun city page scraper (HTML + JSON extraction) |
+| `lib/scrapers/curate.ts` | GPT-4o-mini curation — picks best 3-5 events from scraped candidates |
+| `lib/scrapers/types.ts` | Shared types: ScrapedEvent, CuratedCityEvent |
 | `lib/cache.ts` | Browser localStorage cache (persona 7d, events weekly) |
 | `app/api/discover/route.ts` | Discovery endpoint (rate-limited, persists to Redis, feedback-aware) |
 | `app/api/user/state/route.ts` | Returns server-side persona + current event (returning user fast path) |
 | `app/api/persona/route.ts` | Persona generation from calendar data |
 | `app/api/cron/discover/route.ts` | Weekly automated discovery for all users |
 | `app/api/feedback/route.ts` | Event feedback (thumbs up/down) |
+| `app/api/city-events/route.ts` | Free tier: cached city events (scrapes on cold start) |
+| `app/api/cron/city-events/route.ts` | Weekly city events cron (scrape Luma + Shotgun → curate → cache) |
 
 ## Auth flow
 

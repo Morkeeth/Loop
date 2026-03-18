@@ -15,6 +15,7 @@ export interface LoopUser {
   timezone: string;
   tags: string[];        // merged interest/fitness/local tags
   persona: any | null;   // cached persona JSON
+  plan: 'free' | 'pro'; // subscription tier
   last_event_at: string | null;  // ISO date of last discovered event
   loop_calendar_id: string | null; // dedicated Loop calendar on user's Google account
   created_at: string;
@@ -71,7 +72,7 @@ export interface StoredEvent {
   week_key: string; // e.g. "2026-W12"
 }
 
-function weekKey(): string {
+export function weekKey(): string {
   const now = new Date();
   const jan1 = new Date(now.getFullYear(), 0, 1);
   const weekNum = Math.ceil(((now.getTime() - jan1.getTime()) / 86400000 + jan1.getDay() + 1) / 7);
@@ -151,6 +152,33 @@ export async function getCategoryPreferences(userId: string): Promise<CategoryPr
     prefs[cat].net = prefs[cat].up - prefs[cat].down;
   }
   return prefs;
+}
+
+// --- City events (free tier) ---
+
+import type { CuratedCityEvent } from './scrapers/types';
+
+function cityKey(city: string): string {
+  return `city:${city.toLowerCase().trim()}:${weekKey()}`;
+}
+
+export async function saveCityEvents(city: string, events: CuratedCityEvent[]): Promise<void> {
+  const key = cityKey(city);
+  await redis.set(key, events);
+  await redis.expire(key, 10 * 24 * 3600); // 10-day TTL
+  await redis.sadd('cities:active', city.toLowerCase().trim());
+}
+
+export async function getCityEvents(city: string): Promise<CuratedCityEvent[] | null> {
+  return redis.get<CuratedCityEvent[]>(cityKey(city));
+}
+
+export async function getActiveCities(): Promise<string[]> {
+  return redis.smembers('cities:active');
+}
+
+export async function addActiveCity(city: string): Promise<void> {
+  await redis.sadd('cities:active', city.toLowerCase().trim());
 }
 
 export { redis };
