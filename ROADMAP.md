@@ -28,7 +28,10 @@ Without notifications, the weekly cron job finds events that nobody sees.
 - [x] `user.plan` field on LoopUser — ready for payment gating (`free` | `pro`)
 - [ ] Lemon Squeezy / Stripe integration — payment checkout + webhook
 - [ ] Gate `/api/discover` behind `pro` plan (free users see city picks only)
-- [ ] Add more event sources (Eventbrite, Dice, RA)
+- [x] Eventbrite scraper — parses `__SERVER_DATA__` JSON + JSON-LD from city search pages (35 cities)
+- [x] Dice scraper — fetches venue pages via `__NEXT_DATA__`, extracts prices (8 cities, 50+ venues)
+- [x] All 4 scrapers run in parallel per city (Luma + Shotgun + Eventbrite + Dice)
+- [ ] Add more event sources (RA, Resident Advisor)
 
 ## P1 — Core product quality
 
@@ -134,3 +137,8 @@ Redis works but is fragile for user data:
 - [x] Explore page redesigned: curated city picks with upsell
 - [x] `user.plan` field (`free` | `pro`) ready for payment gating
 - [x] `node-html-parser` dependency for Shotgun scraping
+- [x] Eventbrite scraper — `__SERVER_DATA__` + JSON-LD extraction, 35 city slugs, category inference
+- [x] Dice scraper — venue-based scraping via `__NEXT_DATA__`, price parsing, 8 cities with 50+ venues
+- [x] 4 scrapers wired into city-events API + cron (parallel execution)
+- [x] Fix persona route — lazy OpenAI client init (was crashing build without env vars)
+- [x] All prompts consolidated in `lib/prompts.ts` — single file for rapid iteration
