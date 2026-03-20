@@ -72,7 +72,9 @@ export async function scrapeLuma(city: string): Promise<ScrapedEvent[]> {
     }
 
     const nextData = JSON.parse(match[1]);
-    const entries = nextData?.props?.pageProps?.initialData?.events;
+    const initialData = nextData?.props?.pageProps?.initialData;
+    // Structure: initialData.data.events (not initialData.events)
+    const entries = initialData?.data?.events || initialData?.events;
     if (!Array.isArray(entries) || entries.length === 0) {
       console.log(`Luma: no events found for ${slug}`);
       return [];
@@ -98,9 +100,10 @@ export async function scrapeLuma(city: string): Promise<ScrapedEvent[]> {
         let price: string | null = null;
         if (entry.ticket_info?.is_free) {
           price = 'Free';
-        } else if (entry.ticket_info?.price) {
-          const currency = entry.ticket_info.currency_info?.symbol || '€';
-          price = `${currency}${entry.ticket_info.price}`;
+        } else if (entry.ticket_info?.price?.cents) {
+          const symbols: Record<string, string> = { eur: '€', usd: '$', gbp: '£' };
+          const sym = symbols[entry.ticket_info.price.currency] || entry.ticket_info.price.currency?.toUpperCase() + ' ';
+          price = `${sym}${(entry.ticket_info.price.cents / 100).toFixed(0)}`;
         }
 
         events.push({
