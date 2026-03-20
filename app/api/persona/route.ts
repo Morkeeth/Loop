@@ -4,9 +4,9 @@ import fs from 'fs';
 import path from 'path';
 import { rateLimit } from '@/lib/rate-limit';
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+function getOpenAI() {
+  return new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+}
 
 export async function POST(request: NextRequest) {
   // Rate limit: 5 persona builds per minute per IP
@@ -40,6 +40,7 @@ export async function POST(request: NextRequest) {
       .replace(/\*\*/g, '')
       .trim();
 
+    const openai = getOpenAI();
     let response;
     try {
       response = await openai.chat.completions.create({

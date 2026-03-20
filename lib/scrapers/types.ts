@@ -8,7 +8,7 @@ export interface ScrapedEvent {
   imageUrl: string | null;
   description: string;
   price: string | null;  // "Free", "€25", etc.
-  source: 'luma' | 'shotgun';
+  source: 'luma' | 'shotgun' | 'eventbrite' | 'dice';
   category?: string;
 }
 
@@ -23,6 +23,6 @@ export interface CuratedCityEvent {
   imageUrl: string | null;
   description: string;   // 2-3 sentence sell
   category: string;      // music | art | food | tech | wellness | social | culture | nightlife | other
-  source: 'luma' | 'shotgun';
+  source: 'luma' | 'shotgun' | 'eventbrite' | 'dice';
   whyGo: string;         // one-line pitch
 }

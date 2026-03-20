@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getActiveCities, saveCityEvents } from '@/lib/kv-store';
 import { scrapeLuma } from '@/lib/scrapers/luma';
 import { scrapeShotgun } from '@/lib/scrapers/shotgun';
+import { scrapeEventbrite } from '@/lib/scrapers/eventbrite';
+import { scrapeDice } from '@/lib/scrapers/dice';
 import { curateEvents } from '@/lib/scrapers/curate';
 
 const DEFAULT_CITIES = [
@@ -29,12 +31,14 @@ export async function GET(request: NextRequest) {
         await new Promise(r => setTimeout(r, 2000));
       }
 
-      const [lumaEvents, shotgunEvents] = await Promise.all([
+      const [lumaEvents, shotgunEvents, eventbriteEvents, diceEvents] = await Promise.all([
         scrapeLuma(city),
         scrapeShotgun(city),
+        scrapeEventbrite(city),
+        scrapeDice(city),
       ]);
 
-      const allEvents = [...lumaEvents, ...shotgunEvents];
+      const allEvents = [...lumaEvents, ...shotgunEvents, ...eventbriteEvents, ...diceEvents];
 
       if (allEvents.length === 0) {
         results.push({ city, status: 'no events found' });
