@@ -70,7 +70,7 @@ Return JSON array only:
     "imageUrl": null,
     "description": "2-3 sentences, casual and warm",
     "category": "${EVENT_CATEGORIES}",
-    "source": "luma or shotgun",
+    "source": "luma, shotgun, eventbrite, or dice",
     "whyGo": "One punchy line"
   }
 ]`;
