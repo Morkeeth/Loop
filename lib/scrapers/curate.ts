@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 import type { ScrapedEvent, CuratedCityEvent } from './types';
 import { parseJsonFromText } from '../discover';
+import { buildCurationPrompt } from '../prompts';
 
 export async function curateEvents(city: string, events: ScrapedEvent[]): Promise<CuratedCityEvent[]> {
   if (events.length === 0) return [];
@@ -24,35 +25,7 @@ export async function curateEvents(city: string, events: ScrapedEvent[]): Promis
     category: e.category,
   }));
 
-  const prompt = `You are Loop's city editor. You have ${events.length} events happening in ${city} soon. Pick the 5 most interesting, surprising, or niche ones — the kind of thing a cool local friend would text you about.
-
-EVENTS:
-${JSON.stringify(eventsJson, null, 2)}
-
-RULES:
-- Pick 3-5 events (fewer if there aren't enough good ones)
-- Reject: corporate meetups, generic networking, tourist attractions, ongoing exhibitions
-- Prefer: intimate live music, pop-up dinners, workshops, gallery openings, DJ sets, comedy nights, film screenings, run clubs, markets
-- Write the description like you're texting a friend at 6pm: "Dude, there's this tiny jazz thing in a bookshop tonight..."
-- whyGo should be one punchy line that makes someone stop scrolling
-
-Return JSON array only:
-[
-  {
-    "title": "Exact event name",
-    "venue": "Venue name",
-    "address": "Full address",
-    "date": "YYYY-MM-DD",
-    "time": "HH:MM",
-    "endTime": "HH:MM",
-    "url": "Event URL",
-    "imageUrl": null,
-    "description": "2-3 sentences, casual and warm",
-    "category": "music | art | food | tech | wellness | social | culture | nightlife | other",
-    "source": "luma or shotgun",
-    "whyGo": "One punchy line"
-  }
-]`;
+  const prompt = buildCurationPrompt(city, JSON.stringify(eventsJson, null, 2));
 
   try {
     const response = await openai.chat.completions.create({
@@ -77,7 +50,6 @@ Return JSON array only:
     });
   } catch (error) {
     console.log(`Curation failed for ${city}:`, error instanceof Error ? error.message : 'unknown');
-    // Fallback: return top 5 raw events formatted
     return events.slice(0, 5).map(e => formatRawEvent(e));
   }
 }

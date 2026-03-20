@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 
 import { CalendarEvent, ProcessedEvent, EventCategory } from '@/types/calendar';
+import { INSIGHT_PROMPT } from './prompts';
 
 export class CalendarService {
   private accessToken: string;
@@ -25,15 +26,7 @@ export class CalendarService {
 
   private static getInsightPrompt() {
     if (!CalendarService.insightPrompt) {
-      CalendarService.insightPrompt = `You are Loop's mini commentator. Generate 3 short energetic insights about a user's identity inferred from calendar events. Be witty but kind.
-
-Rules:
-- Output a JSON array of strings (no markdown, no explanations).
-- Each string ≤ 120 characters.
-- Reference patterns, hobbies, or routines visible in the events.
-- Avoid sensitive topics (health, politics, religion, demographics).
-- If signals are weak, acknowledge light data.
-`;
+      CalendarService.insightPrompt = INSIGHT_PROMPT;
     }
     return CalendarService.insightPrompt;
   }
