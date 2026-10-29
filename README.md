@@ -1,5 +1,23 @@
 # Loop - One Magical Event in Your Calendar
 
+## TLDR
+
+Use calendar context and web search to find events that fit a person's interests and available time.<br>
+For people trying to discover something beyond the meetings already on their calendar.<br>
+Google integration needs OAuth; an ICS route produces a calendar file for review and import.
+
+## The problem and approach
+
+Good niche events exist near you but you never find them, and generic event apps know nothing about your rhythms or your free time.
+GPT-4o builds a persona from your calendar patterns, GPT-5 with web search finds events with verifiable source URLs, conflict detection marks what does not fit, and compatible events land straight in your calendar (Google, or an ICS download).
+Built at AI Paris Hack 2025. Live: https://loop-chi-sooty.vercel.app or run it locally with `npm install && npm run dev` plus Google OAuth and OpenAI keys.
+
+## Review and pick up the work
+
+[PROJECT.md](PROJECT.md) · [Agent guide](AGENTS.md)
+
+Start with the linked source, setup and evidence. Recorded demos and sample data keep their original scope; use the repository instructions for a fresh run.
+
 ## Summary
 Loop connects your Google Calendar to AI-powered web search. It learns your rhythms, interests, and free time, then finds exceptional events in your area and adds them directly to your calendar.
 
@@ -102,8 +120,12 @@ loop-labs-main/
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) for details.
+MIT License - see LICENSE (not included in this checkout) for details.
 
 ---
 
 **Built with Next.js, OpenAI, and Google Calendar API**
+
+## License and data boundaries
+
+This checkout has no root license file establishing general reuse rights. Data, provider responses, media, fonts and other third-party assets may have separate terms. Repository access alone does not grant rights to those materials. 
