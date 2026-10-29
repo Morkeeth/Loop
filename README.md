@@ -1,5 +1,12 @@
 # Loop - One Magical Event in Your Calendar
 
+**Loop reads your Google Calendar and puts one magical event a week into it, found on the real web and matched to how you actually live.**
+
+Good niche events exist near you but you never find them, and generic event apps know nothing about your rhythms or your free time.
+For anyone whose calendar is full of work and empty of surprise.
+GPT-4o builds a persona from your calendar patterns, GPT-5 with web search finds events with verifiable source URLs, conflict detection marks what does not fit, and compatible events land straight in your calendar (Google, or an ICS download).
+Built at AI Paris Hack 2025. Live: https://loop-chi-sooty.vercel.app or run it locally with `npm install && npm run dev` plus Google OAuth and OpenAI keys.
+
 ## Summary
 Loop connects your Google Calendar to AI-powered web search. It learns your rhythms, interests, and free time, then finds exceptional events in your area and adds them directly to your calendar.
 
